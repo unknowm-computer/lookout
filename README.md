@@ -122,7 +122,7 @@ SSD를 제외한 각 항목의 `프로세스 · 최대 5개`에서 사용량이 
 
 기본 빌드는 [현재 GitHub 저장소](https://github.com/unknowm-computer/lookout)의 최신 Release에서 `appcast.xml`을 읽습니다. 주소와 Ed25519 공개 키는 `Resources/UpdateConfiguration.json`에 보관하고 앱의 Info.plist에 포함합니다. 개인 키는 배포 Mac의 키체인에만 보관합니다. 별도 서버나 고정 IP는 필요하지 않습니다.
 
-아직 GitHub Release는 게시하지 않았으므로 현재 온라인 확인은 피드를 찾지 못합니다. 준비된 파일을 Release로 게시한 뒤 사용할 수 있습니다. 업데이트 설정이 없던 기존 앱에는 이번 앱을 먼저 수동 설치하고, 이후 더 높은 build 번호의 버전부터 앱 안에서 업데이트합니다. 자동 확인은 기본 꺼짐이며 설치는 사용자가 선택합니다. 실제 GitHub 다운로드·앱 교체·재실행 검증은 남아 있습니다.
+[Lookout 0.6.1 Release](https://github.com/unknowm-computer/lookout/releases/tag/v0.6.1)에 배포 파일과 업데이트 피드를 게시했습니다. GitHub 피드·공개 키가 포함된 0.6.0 (build 6)은 앱 안에서 0.6.1 (build 7)로 업데이트할 수 있습니다. 업데이트 설정이 없던 기존 앱은 이번 DMG로 한 번 수동 설치합니다. 자동 확인은 기본 꺼짐이며 설치는 사용자가 선택합니다. Apple Silicon·macOS 27의 검증용 0.6.0 복사본에서 공개 GitHub 다운로드·앱 교체·0.6.1 재실행을 확인했습니다.
 
 배포 파일을 만들려면 다음을 실행합니다. GitHub에 자동 업로드하지 않습니다.
 
