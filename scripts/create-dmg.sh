@@ -18,6 +18,9 @@ task_output="$PWD/build/Lookout-$task_version.dmg"
 mkdir -p "$task_stage_dir"
 ditto "$task_app_dir" "$task_stage_dir/Lookout.app"
 ln -s /Applications "$task_stage_dir/Applications"
+cp "scripts/Install Lookout.command" "$task_stage_dir/Install Lookout.command"
+chmod 755 "$task_stage_dir/Install Lookout.command"
+cp "Resources/Install Help.txt" "$task_stage_dir/설치 안내.txt"
 codesign --verify --deep --strict "$task_stage_dir/Lookout.app"
 
 # HFS+ / UDZO images can be opened on the minimum supported macOS 15 as well.

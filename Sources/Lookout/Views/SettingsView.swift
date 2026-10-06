@@ -48,7 +48,7 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 8) {
                 sectionTitle("모니터링 항목 · 왼쪽부터 표시 순서")
                 MetricReorderList(scope: .placement, order: settings.configuration.order, separators: true,
-                                  footnote: { settings.capabilities.supports($0) ? nil : "Intel Mac에서는 에너지 모니터링을 지원하지 않습니다." },
+                                  footnote: { settings.capabilities.unsupportedReason(for: $0) },
                                   move: { settings.move($0, to: $1) }) { metric, _ in
                     HStack(spacing: 8) {
                         Image(systemName: metric.symbol).frame(width: 20).foregroundStyle(.secondary)

@@ -1,0 +1,6 @@
+{
+  "repository": "unknowm-computer/lookout",
+  "feedURL": "https://github.com/unknowm-computer/lookout/releases/latest/download/appcast.xml",
+  "publicKey": "S0ACiI1jmWmJEmBlmocfB5KXqMEL4Mf1BBzOQ77DHXA=",
+  "keychainAccount": "local.lookout.app"
+}

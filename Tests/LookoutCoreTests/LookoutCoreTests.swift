@@ -50,7 +50,7 @@ import Testing
 @Test func disabledMemoryAndPlatformFilteringPreserveIndependentSSD() throws {
     let original = MonitorConfiguration(enabled: [.power, .ssd], storageInterval: 1800)
     var restored = try JSONDecoder().decode(SettingsRecord.self, from: JSONEncoder().encode(SettingsRecord(configuration: original))).configuration
-    restored = MonitoringCapabilities(supportsProcessEnergy: false).applying(to: restored)
+    restored = MonitoringCapabilities(supportsGPU: false, supportsProcessEnergy: false).applying(to: restored)
     #expect(restored.enabled == [.ssd] && restored.needsStorageCapacity && restored.storageInterval == 1800)
     #expect(MonitorConfiguration(storageInterval: -1).storageInterval == 30)
 }

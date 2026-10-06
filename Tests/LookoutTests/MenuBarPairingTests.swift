@@ -17,10 +17,12 @@ import Testing
     #expect(restored.configuration == expected)
     #expect(restored.alerts == alerts && restored.charts == charts)
     #expect(restored.menuBarPriority == priority && restored.menuBarValues == values)
-    let intel = SettingsStore(defaults: defaults, capabilities: MonitoringCapabilities(supportsProcessEnergy: false))
+    let intel = SettingsStore(defaults: defaults, capabilities: MonitoringCapabilities(supportsGPU: false, supportsProcessEnergy: false))
     #expect(intel.configuration.menuBarGrouping == grouping)
     #expect(!intel.configuration.enabled.contains(.power))
-    #expect(intel.configuration.menuBarGrouping.units(metrics: intel.configuration.visible).contains(.metric(.gpu)))
+    #expect(!intel.configuration.enabled.contains(.gpu))
+    #expect(!intel.configuration.menuBarGrouping.units(metrics: intel.configuration.visible)
+        .flatMap(\.metrics).contains(.gpu))
 }
 
 @Test @MainActor func pairingDragOnlyPreviewsUntilReleaseAndInvalidTargetsDoNothing() {

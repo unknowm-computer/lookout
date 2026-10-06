@@ -16,7 +16,7 @@ Lookout은 ‘활성 상태 보기’에서 확인하는 시스템 상태와 프
 
 ## 2. 모니터링과 지표 계산
 
-최초 설치는 Apple Silicon에서 CPU·메모리·SSD·네트워크·디스크·에너지·GPU를 활성화하고, Intel 실행에서는 에너지를 제외한다. 기본 갱신은 2초이며 갱신 주기는 1초·2초·3초·5초 중 선택한다. 첫 차분 측정·수집 실패·미지원은 `—`와 안내로 구분하고, 유효한 0은 그대로 표시한다.
+최초 설치는 Apple Silicon에서 CPU·메모리·SSD·네트워크·디스크·에너지·GPU를 활성화하고, Intel 실행에서는 GPU·에너지를 제외한다. 기본 갱신은 2초이며 갱신 주기는 1초·2초·3초·5초 중 선택한다. 첫 차분 측정·수집 실패·미지원은 `—`와 안내로 구분하고, 유효한 0은 그대로 표시한다.
 
 | 항목 | 수집·계산 기준 | 표시 범위 |
 | --- | --- | --- |
@@ -49,9 +49,10 @@ Lookout은 ‘활성 상태 보기’에서 확인하는 시스템 상태와 프
 
 ### GPU와 에너지
 
+- Intel(`x86_64`) 실행에서는 GPU·에너지를 설정에서 비활성화하고, 저장 설정과 관계없이 현재 수집·메뉴바·상세에서 제외한다. GPU 알림 설정도 비활성화하며 저장된 알림 조건·그룹은 유지하되 실행 시 알림 평가와 복원된 활성 경고에서 제외한다. CLI 수집에도 같은 제한을 적용한다. Intel에서 GPU 드라이버별 호환성을 확장하는 작업은 현재 범위에서 제외한다.
 - GPU 부가 통계는 선택적이며 미지원 필드를 0으로 채우지 않는다. 여러 GPU는 Registry ID 기준으로 일관된 한 장치를 선택한다.
 - 에너지는 공개 `proc_pid_rusage(RUSAGE_INFO_V6).ri_energy_nj`의 차분을 W로 변환한다. PID와 시작 시각으로 프로세스를 식별한다.
-- Mac 전체 전력이나 ‘활성 상태 보기’의 상대 ‘에너지 영향’ 점수가 아니다. Intel(`x86_64`) 실행에서는 기존 저장 설정에 에너지가 켜져 있어도 현재 실행 구성에서 제외하고, 설정 체크박스를 비활성화한다. CLI 수집에도 동일한 제한을 적용한다. 나머지 항목·순서·갱신 주기·인터페이스는 유지한다. Apple Silicon의 카운터 미지원 기기는 전력을 미지원으로 표시한다.
+- Mac 전체 전력이나 ‘활성 상태 보기’의 상대 ‘에너지 영향’ 점수가 아니다. 현재 구현은 Intel 에너지 카운터를 미지원으로 처리하고 0으로 채워진 필드를 측정된 0 W로 표시하지 않는다. 플랫폼 제한을 적용해도 나머지 항목·순서·갱신 주기·인터페이스는 유지한다. Apple Silicon의 카운터 미지원 기기는 전력을 미지원으로 표시한다.
 - 잠자기 방지는 `IOPMCopyAssertionsByProcess`의 활성 시스템 잠자기 방지 assertion만 집계한다. API 실패와 실제 목록 없음을 구분한다.
 
 ## 3. 메뉴바와 상세 패널
@@ -199,24 +200,27 @@ Lookout은 ‘활성 상태 보기’에서 확인하는 시스템 상태와 프
 
 ### 현재 설치와 교체
 
-- 현재 버전은 `0.6.0` (build `6`)이며 기본 빌드와 로컬 생성 앱에 배포 피드·공개 키가 없다. 자동 업데이트 확인은 비활성 상태다.
-- 기존 앱을 종료하고 DMG 또는 `build/Lookout.app`의 새 앱으로 `/Applications/Lookout.app`을 대치한 뒤 실행한다. 개발 폴더의 앱과 설치된 앱은 별도 경로다.
+- 현재 버전은 `0.6.0` (build `6`)이며 기본 빌드에 현재 공개 GitHub 저장소의 업데이트 피드·공개 키를 포함한다. 자동 확인은 기본 꺼짐이다. GitHub Release 게시 전에는 온라인 확인이 404로 실패한다.
+- 개인·소규모 지인 배포는 DMG 안의 `Install Lookout.command`를 터미널의 `/bin/bash`로 실행해 설치·업데이트한다. 기본 경로는 `/Applications/Lookout.app`, 명시적 `--user`는 `~/Applications/Lookout.app`이다. 설치 위치의 같은 사용자 Lookout만 종료하고 개발 빌드·다른 복사본은 종료하지 않는다. `--destination`은 명시한 절대 경로, `--no-launch`는 설치 후 실행 생략을 지원한다. 관리자 권한을 자동 요청하지 않는다. 기존 Finder 대치도 유지하며 개발 폴더와 설치된 앱은 별도 경로다.
+- 새 앱의 Bundle ID·중첩 서명을 검사한 뒤 같은 설치 폴더의 임시 경로에 복사·재검증한다. 새 앱 복사본의 `com.apple.quarantine`만 재귀 제거하고 다른 속성·원본·DMG·전체 Gatekeeper 정책은 변경하지 않는다. 목적지가 심볼릭 링크이거나 다른 Bundle ID면 교체를 중단한다. 설치 잠금으로 중복 실행을 차단하고 기존 앱을 임시 백업으로 옮긴 뒤 새 앱을 배치·최종 검증한다. 실패 시 기존 앱을 복구하며 복구 실패 시 백업을 보존한다. 완료 뒤 임시 파일·잠금을 정리하고 앱을 실행한다.
 - 같은 Bundle ID `local.lookout.app`을 유지하면 앱 파일 교체로 UserDefaults 설정을 초기화하지 않는다. 최근 기록·프로세스 펼침 상태는 재실행 시 초기화한다. 앱 대치 후 로그인 항목의 실제 상태는 macOS에서 다시 확인한다.
 
 ### 업데이트 배포 계약
 
 - Sparkle 2.10.0의 `SPUStandardUpdaterController`를 사용하고 프레임워크·보조 프로그램·라이선스를 번들에 포함한다.
-- `LOOKOUT_UPDATE_FEED_URL / LOOKOUT_UPDATE_PUBLIC_KEY`를 빌드 시 `SUFeedURL / SUPublicEDKey`에 저장한다. HTTPS 피드와 32바이트 base64 Ed25519 공개 키를 함께 요구하며 URL 사용자 정보·fragment를 허용하지 않는다.
-- 두 값이 없으면 배포 준비 상태로 두고 엔진·수동/자동 확인을 비활성화한다. 한 값만 있거나 형식 오류면 빌드를 중단한다.
+- 기본값은 `Resources/UpdateConfiguration.json`이다. 피드는 `https://github.com/unknowm-computer/lookout/releases/latest/download/appcast.xml`이며 공개 키와 함께 빌드 시 `SUFeedURL / SUPublicEDKey`에 저장한다. HTTPS 피드와 32바이트 base64 Ed25519 공개 키를 함께 요구하며 URL 사용자 정보·fragment를 허용하지 않는다.
+- `LOOKOUT_UPDATE_FEED_URL / LOOKOUT_UPDATE_PUBLIC_KEY`로 두 기본값을 함께 덮어쓸 수 있다. 한 값만 지정하거나 형식 오류면 빌드를 중단한다. `LOOKOUT_DISABLE_UPDATES=1`은 두 plist 값을 제거하고 엔진·수동/자동 확인을 비활성화하며 환경 변수 덮어쓰기와 동시에 사용할 수 없다.
 - 피드·공개 키가 없는 기존 앱에는 해당 설정을 포함한 앱을 먼저 수동 설치한다. 이후 배포마다 `CFBundleVersion`을 증가시키고 피드에 대응하는 버전·파일·서명 정보를 게시한다. 버전 표시는 `CFBundleShortVersionString`을 사용한다.
 - 자동 확인은 기본 꺼짐이다. 자동 다운로드·자동 설치·시스템 프로필 전송은 비활성화하고 설치·재실행은 사용자가 선택한다.
-- 압축 해제 전 Ed25519 서명을 검증한다. 개인 키는 앱·저장소에 넣지 않는다. 실제 Lookout 업데이트 파일의 설치·재실행은 배포 준비 후 검증한다.
+- 압축 해제 전 Ed25519 서명을 검증한다. 개인 키는 배포 Mac의 로그인 키체인(service `https://sparkle-project.org`, account `local.lookout.app`)에 보관하며 앱·저장소·배포 파일에 넣지 않는다. 공개 키를 바꾸거나 개인 키를 새로 생성하면 기존 앱의 검증 계약이 달라지므로 일반 업데이트 과정에서 교체하지 않는다. 실제 Lookout 업데이트 파일의 설치·재실행은 배포 후 검증한다.
+- `scripts/prepare-release.py`는 origin과 설정의 저장소 일치·키체인 공개 키 일치 여부를 확인한 뒤 현재 소스를 Universal 앱·DMG로 빌드한다. 심볼릭 링크와 실행 권한을 보존하는 `ditto` ZIP을 생성하고 Sparkle `sign_update`로 서명·검증한다. appcast는 앱과 같은 내부 build·표시 버전·최소 OS, ZIP 크기·Ed25519 서명을 기록한다. ZIP URL은 `releases/download/v<version>/Lookout-<version>.zip`으로 해당 릴리스에 고정한다.
+- 결과는 `build/releases/v<version>-build<build>/`의 ZIP·DMG·appcast·SHA-256 목록이다. 기존 결과 폴더는 덮어쓰지 않으며 GitHub 게시·Git commit/push·실행 중인 앱 교체는 수행하지 않는다. ZIP·DMG·appcast를 같은 일반 최신 Release로 게시해야 앱이 피드를 찾을 수 있다. 이미 게시한 태그·파일은 덮어쓰지 않고 다음 버전과 build를 증가시킨다.
 
 ### 패키징
 
 - `scripts/build.sh`는 두 아키텍처를 함께 빌드하고 Sparkle의 보조 실행 파일까지 검사한 뒤 서명·엄격한 중첩 서명 검증을 수행한다.
 - 앱 실행 파일은 `dsymutil`로 `build/Lookout.app.dSYM`을 생성한 뒤 `strip -x -S`로 로컬·디버그 심볼을 제거한다. 외부 심볼·Swift 런타임 메타데이터·Universal 아키텍처와 Sparkle 원본 프레임워크는 유지한다. dSYM은 설치 번들·DMG 밖에 보관하며 심볼 제거 후 앱을 다시 서명한다.
-- `scripts/create-dmg.sh`는 현재 소스를 빌드한 뒤 앱과 `/Applications` 바로가기를 HFS+·UDZO 이미지에 담는다. 파일명은 앱 버전을 따르며 같은 버전의 이미지를 교체한다. DMG 생성은 실행 중인 앱의 교체·공증·업데이트 배포 설정을 수행하지 않는다.
+- `scripts/create-dmg.sh`는 현재 소스를 빌드한 뒤 앱·`/Applications` 바로가기·실행 권한을 부여한 `Install Lookout.command`·`설치 안내.txt`를 HFS+·UDZO 이미지에 담는다. 파일명은 앱 버전을 따르며 같은 버전의 이미지를 교체한다. DMG 생성은 실행 중인 앱의 교체·공증·업데이트 배포 설정을 수행하지 않는다.
 
 ## 9. 현재 코드 구성
 

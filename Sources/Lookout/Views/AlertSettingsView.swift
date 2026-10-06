@@ -42,6 +42,7 @@ private struct AlertRuleView: View {
     @ObservedObject var settings: SettingsStore
     @ObservedObject var notifications: NotificationService
     private var rule: AlertRule { settings.alerts.rule(for: metric) }
+    private var supported: Bool { settings.capabilities.supports(metric) }
     private var monitored: Bool { settings.configuration.enabled.contains(metric) }
     private var title: String {
         switch metric { case .ssd: "SSD 여유 공간"; default: "\(metric.title) 사용률" }
@@ -53,12 +54,12 @@ private struct AlertRuleView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Image(systemName: metric.symbol).frame(width: 18).foregroundStyle(.secondary)
-                Toggle(title, isOn: Binding(get: { rule.enabled }, set: { enabled in
+                Toggle(title, isOn: Binding(get: { supported && rule.enabled }, set: { enabled in
                     settings.updateAlert(metric) { $0.enabled = enabled }
                     if enabled && notifications.authorization == .notDetermined {
                         Task { await notifications.requestAuthorization() }
                     }
-                })).toggleStyle(.checkbox)
+                })).toggleStyle(.checkbox).disabled(!supported)
             }
             HStack(spacing: 5) {
                 Text("기준")
@@ -75,8 +76,9 @@ private struct AlertRuleView: View {
                         Text(duration == 0 ? "즉시" : "\(Int(duration))초 유지").tag(duration)
                     }
                 }.labelsHidden().frame(width: 105)
-            }.disabled(!rule.enabled)
-            Text(monitored ? "\(rule.recoveryDescription)" : "모니터링 꺼짐 · 알림 판단 일시 중지")
+            }.disabled(!supported || !rule.enabled)
+            Text(settings.capabilities.unsupportedReason(for: metric) ??
+                 (monitored ? rule.recoveryDescription : "모니터링 꺼짐 · 알림 판단 일시 중지"))
                 .font(.system(size: 10)).foregroundStyle(.secondary)
         }.padding(11).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
     }

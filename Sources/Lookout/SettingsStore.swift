@@ -80,6 +80,7 @@ import LookoutCore
         showsSwapDetails = value
     }
     func updateAlert(_ metric: Metric, _ change: (inout AlertRule) -> Void) {
+        guard capabilities.supports(metric) else { return }
         var next = alerts
         guard let index = next.rules.firstIndex(where: { $0.metric == metric }) else { return }
         change(&next.rules[index]); saveAlerts(next)
