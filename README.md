@@ -2,7 +2,7 @@
 
 macOS의 ‘활성 상태 보기’에서 확인하는 시스템 상태와 프로세스 정보를 메뉴바에서 빠르게 볼 수 있는 앱입니다. 필요한 항목을 선택해 사용하고, 메뉴바 항목을 클릭해 상세 수치와 최근 그래프를 확인합니다.
 
-현재 구현 기준: 2026-10-06 · 버전 `0.6.0` (build `6`). Swift·SwiftUI·AppKit 기반 macOS 네이티브 앱입니다.
+현재 구현 기준: 2026-10-06 · 버전 `0.6.1` (build `7`). Swift·SwiftUI·AppKit 기반 macOS 네이티브 앱입니다.
 
 | 문서 | 내용 |
 | --- | --- |
@@ -130,7 +130,7 @@ SSD를 제외한 각 항목의 `프로세스 · 최대 5개`에서 사용량이 
 python3 scripts/prepare-release.py
 ```
 
-`build/releases/v0.6.0-build6/`에 `Lookout-0.6.0.zip`, `Lookout-0.6.0.dmg`, `appcast.xml`, `SHA256SUMS.txt`가 생성됩니다. ZIP은 Sparkle 업데이트용, DMG는 최초·수동 설치용입니다. 게시 방법과 다음 버전 준비는 [GitHub 업데이트 배포 안내](docs/UPDATE_RELEASE.md)를 따릅니다.
+`build/releases/v0.6.1-build7/`에 `Lookout-0.6.1.zip`, `Lookout-0.6.1.dmg`, `appcast.xml`, `SHA256SUMS.txt`가 생성됩니다. ZIP은 Sparkle 업데이트용, DMG는 최초·수동 설치용입니다. 게시 방법과 다음 버전 준비는 [GitHub 업데이트 배포 안내](docs/UPDATE_RELEASE.md)를 따릅니다.
 
 다른 배포 경로를 테스트하려면 `LOOKOUT_UPDATE_FEED_URL`과 `LOOKOUT_UPDATE_PUBLIC_KEY`를 함께 지정해 기본값을 덮어씁니다. 업데이트를 제외한 개발 빌드는 `LOOKOUT_DISABLE_UPDATES=1 bash scripts/build.sh`로 만듭니다. 배포 스크립트는 기본 GitHub 주소와 서명 키가 일치하는 빌드만 허용합니다.
 
@@ -175,7 +175,7 @@ pgrep -fl '/Lookout.app/Contents/MacOS/Lookout'
 bash scripts/create-dmg.sh
 ```
 
-현재 소스로 앱을 빌드한 뒤 `build/Lookout-0.6.0.dmg`을 생성합니다. 파일명의 버전은 앱의 `CFBundleShortVersionString`을 따릅니다. 같은 버전으로 다시 만들면 기존 DMG를 교체합니다.
+현재 소스로 앱을 빌드한 뒤 `build/Lookout-0.6.1.dmg`을 생성합니다. 파일명의 버전은 앱의 `CFBundleShortVersionString`을 따릅니다. 같은 버전으로 다시 만들면 기존 DMG를 교체합니다.
 
 DMG에는 `Lookout.app`, `Applications` 바로가기, `Install Lookout.command`, `설치 안내.txt`가 들어갑니다. 개인용 설치 스크립트는 새 앱의 서명을 검사하고, 설치 위치의 실행 중인 Lookout을 종료한 뒤 교체합니다. 실패 시 보관한 기존 앱을 복구하며 설치가 끝나면 새 앱을 실행합니다.
 

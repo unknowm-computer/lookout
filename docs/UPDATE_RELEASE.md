@@ -12,18 +12,18 @@ https://github.com/unknowm-computer/lookout/releases/latest/download/appcast.xml
 
 ## 1. 배포 파일 준비
 
-처음 구성한 버전은 `0.6.0` (build `6`)이다. 다음 배포는 `Resources/Info.plist`의 `CFBundleShortVersionString`과 `CFBundleVersion`을 모두 증가시킨다. 예를 들어 `0.6.1` / `7`로 변경한다. 이미 게시된 태그와 파일을 교체하지 않는다.
+현재 배포 버전은 `0.6.1` (build `7`)이며 업데이트 연결은 `0.6.0` (build `6`)부터 포함한다. 다음 배포는 `Resources/Info.plist`의 `CFBundleShortVersionString`과 `CFBundleVersion`을 모두 증가시킨다. 예를 들어 다음 배포는 `0.6.2` / `8`로 변경한다. 이미 게시된 태그와 파일을 교체하지 않는다.
 
 ```sh
 python3 scripts/prepare-release.py
 ```
 
-스크립트는 저장소 주소·서명 키 일치를 검사하고 앱·DMG를 빌드한 뒤 업데이트 ZIP 서명과 appcast를 생성한다. `build/releases/v0.6.0-build6/` 예시:
+스크립트는 저장소 주소·서명 키 일치를 검사하고 앱·DMG를 빌드한 뒤 업데이트 ZIP 서명과 appcast를 생성한다. `build/releases/v0.6.1-build7/` 예시:
 
 | 파일 | 용도 |
 | --- | --- |
-| `Lookout-0.6.0.zip` | Sparkle가 다운로드·검증·설치할 앱 |
-| `Lookout-0.6.0.dmg` | 최초 설치·수동 설치용 |
+| `Lookout-0.6.1.zip` | Sparkle가 다운로드·검증·설치할 앱 |
+| `Lookout-0.6.1.dmg` | 최초 설치·수동 설치용 |
 | `appcast.xml` | 버전·최소 OS·ZIP 주소·서명·크기 |
 | `SHA256SUMS.txt` | 생성한 세 파일의 SHA-256 확인 |
 
@@ -35,7 +35,7 @@ python3 scripts/prepare-release.py
 
 1. 이번 소스를 검토·commit·push하여 배포할 코드가 GitHub에 있는지 확인한다.
 2. 저장소의 **Releases → Draft a new release**를 연다.
-3. 올린 커밋을 대상으로 `v0.6.0` 태그와 `Lookout 0.6.0` 제목을 지정한다. 다음 버전이면 이름도 함께 바꾼다.
+3. 올린 커밋을 대상으로 `v0.6.1` 태그와 `Lookout 0.6.1` 제목을 지정한다. 다음 버전이면 이름도 함께 바꾼다.
 4. 해당 결과 폴더의 ZIP·DMG·`appcast.xml`·`SHA256SUMS.txt`를 모두 첨부한다.
 5. **Pre-release**로 지정하지 않고 **최신 Release**로 게시한다. Draft 상태에서는 앱이 다운로드할 수 없다.
 6. 피드 주소를 열어 XML 응답과 ZIP 다운로드 주소가 접근 가능한지 확인한다.
@@ -44,7 +44,7 @@ python3 scripts/prepare-release.py
 
 ## 3. 처음 설치와 후속 업데이트
 
-피드·공개 키가 없던 기존 앱은 새 버전을 찾을 수 없다. 이번 DMG로 한 번 수동 설치한 뒤 앱의 **설정 → 업데이트… → 업데이트 확인**을 사용한다. 같은 build `6`은 새 업데이트로 판단하지 않으며 다음 build `7` 이상을 게시해야 실제 업데이트를 제안한다.
+피드·공개 키가 없던 기존 앱은 새 버전을 찾을 수 없다. 이번 DMG로 한 번 수동 설치한 뒤 앱의 **설정 → 업데이트… → 업데이트 확인**을 사용한다. `0.6.0` / build `6` 앱은 이번 `0.6.1` / build `7`을 새 업데이트로 판단한다. 같은 build `7` 앱은 최신 버전으로 판단하며 이후 배포는 build `8` 이상을 사용한다.
 
 `새 버전 자동으로 확인`은 기본 꺼짐이다. 켜더라도 설치·재실행은 사용자가 선택한다. 앱 설정은 같은 Bundle ID를 유지하며 최근 기록은 재실행으로 초기화된다.
 

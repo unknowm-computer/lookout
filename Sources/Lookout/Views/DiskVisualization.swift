@@ -10,28 +10,26 @@ struct DiskVisualization: View {
     private var disk: DiskReading? { if case .disk(let value) = reading?.value { return value }; return nil }
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if style == .bar {
+                Text("5초 평균").font(.system(size: 9)).foregroundStyle(.secondary)
+                HistoryBarChart(metric: .disk, history: history, end: end, color: color).frame(height: 66)
+            } else {
+                MetricChart(metric: .disk, history: history, end: end, color: color).frame(height: 66)
+            }
             HStack(spacing: 14) {
                 rate("읽기", disk?.activity?.read, color)
                 rate("쓰기", disk?.activity?.write, .orange)
             }
-            if style == .bar {
-                HistoryBarChart(metric: .disk, history: history, end: end, color: color).frame(height: 66)
-                Text("최근 5분 · 5초 평균").font(.system(size: 9)).foregroundStyle(.secondary)
-            } else {
-                if style == .gauge {
-                    let upper = ChartData.rateUpperBound(history: history, current: reading?.value)
-                    HStack(spacing: 14) {
-                        rateGauge(disk?.activity?.read, upper: upper, tint: color)
-                        rateGauge(disk?.activity?.write, upper: upper, tint: .orange)
-                    }
+            if style == .gauge {
+                let upper = ChartData.rateUpperBound(history: history, current: reading?.value)
+                HStack(spacing: 14) {
+                    rateGauge(disk?.activity?.read, upper: upper, tint: color)
+                    rateGauge(disk?.activity?.write, upper: upper, tint: .orange)
                 }
-                Text("최근 5분 기록").font(.system(size: 9)).foregroundStyle(.secondary)
-                MetricChart(metric: .disk, history: history, end: end, color: color).frame(height: 66)
             }
             if let message = disk?.activityMessage {
                 Text(message).font(.system(size: 9)).foregroundStyle(.secondary)
             }
-
         }
     }
     private func rate(_ label: String, _ value: Double?, _ tint: Color) -> some View {

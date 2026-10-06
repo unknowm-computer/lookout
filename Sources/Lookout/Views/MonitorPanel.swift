@@ -149,8 +149,8 @@ private struct MetricSection: View {
         switch value {
         case .cpu(let value): return ValueFormat.percent(value)
         case .memory(let value): return "\(ValueFormat.memory(value.used)) / \(ValueFormat.memory(value.total))"
-        case .network(let value): return "↓ \(ValueFormat.rate(value.download))"
-        case .disk: return "시작 디스크"
+        case .network(let value): return value.interface
+        case .disk: return ""
         case .storage(let capacity): return "\(ValueFormat.storage(capacity.used)) / \(ValueFormat.storage(capacity.total))"
         case .power(let value): return value.watts.map(ValueFormat.watts) ?? "—"
         case .gpu(let value): return ValueFormat.percent(value.utilization)
@@ -168,7 +168,11 @@ private struct MetricSection: View {
                     Image(systemName: metric.symbol).foregroundStyle(color).frame(width: 16)
                     Text(metric.title).fontWeight(.semibold)
                     Spacer()
-                    Text(summary).monospacedDigit().fontWeight(.medium)
+                    if metric == .network {
+                        Text(summary).font(.system(size: 10)).foregroundStyle(.secondary)
+                    } else if metric != .disk {
+                        Text(summary).monospacedDigit().fontWeight(.medium)
+                    }
                 }.font(.system(size: 12))
                 if visible {
                     MetricVisualization(metric: metric, reading: reading, history: history.points,
@@ -188,11 +192,10 @@ private struct MetricSection: View {
             case .memory:
                 EmptyView()
             case .network(let value):
-                HStack {
-                    Text(value.interface).foregroundStyle(.secondary)
-                    Spacer()
-                    Text("↑ \(ValueFormat.rate(value.upload))").foregroundStyle(.orange)
-                }.font(.system(size: 10)).monospacedDigit()
+                HStack(spacing: 14) {
+                    networkRate("다운로드", value.download, .green)
+                    networkRate("업로드", value.upload, .orange)
+                }
             case .disk, .storage:
                 EmptyView()
             case .power:
@@ -216,5 +219,16 @@ private struct MetricSection: View {
                 .font(.system(size: 10)).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+    private func networkRate(_ label: String, _ value: Double, _ tint: Color) -> some View {
+        HStack(spacing: 5) {
+            Circle().fill(tint).frame(width: 5, height: 5)
+            Text(label).foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+            Text(ValueFormat.rate(value)).monospacedDigit().fontWeight(.medium)
+        }.font(.system(size: 11)).frame(maxWidth: .infinity)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("네트워크 \(label) 속도")
+            .accessibilityValue(ValueFormat.rate(value))
     }
 }

@@ -48,7 +48,10 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 8) {
                 sectionTitle("모니터링 항목 · 왼쪽부터 표시 순서")
                 MetricReorderList(scope: .placement, order: settings.configuration.order, separators: true,
-                                  footnote: { settings.capabilities.unsupportedReason(for: $0) },
+                                  footnote: { metric in
+                                      settings.capabilities.unsupportedReason(for: metric)
+                                          ?? (metric == .disk ? "macOS가 실행 중인 디스크의 읽기·쓰기 속도를 측정합니다." : nil)
+                                  },
                                   move: { settings.move($0, to: $1) }) { metric, _ in
                     HStack(spacing: 8) {
                         Image(systemName: metric.symbol).frame(width: 20).foregroundStyle(.secondary)
