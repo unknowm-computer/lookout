@@ -1,24 +1,24 @@
 import Foundation
 
 public enum Metric: String, CaseIterable, Codable, Sendable, Identifiable {
-    case cpu, memory, network, disk, power, gpu
+    case cpu, memory, ssd, network, disk, power, gpu
     public var id: String { rawValue }
     public var title: String {
         switch self {
         case .cpu: "CPU"; case .memory: "메모리"; case .network: "네트워크"
-        case .disk: "디스크"; case .power: "에너지"; case .gpu: "GPU"
+        case .disk: "디스크"; case .ssd: "SSD"; case .power: "에너지"; case .gpu: "GPU"
         }
     }
     public var symbol: String {
         switch self {
         case .cpu: "cpu"; case .memory: "memorychip"; case .network: "arrow.up.arrow.down"
-        case .disk: "internaldrive"; case .power: "bolt.fill"; case .gpu: "square.3.layers.3d"
+        case .disk, .ssd: "internaldrive"; case .power: "bolt.fill"; case .gpu: "square.3.layers.3d"
         }
     }
     public var menuTitle: String {
         switch self {
         case .cpu: "CPU"; case .memory: "MEM"; case .network: "NET"
-        case .disk: "SSD"; case .power: "ENG"; case .gpu: "GPU"
+        case .disk: "DISK"; case .ssd: "SSD"; case .power: "ENG"; case .gpu: "GPU"
         }
     }
 }
@@ -28,35 +28,56 @@ public struct MonitorConfiguration: Equatable, Sendable {
     public var order: [Metric]
     public var interval: Int
     public var interface: String?
+    public var storageInterval: Int
+    public var menuBarGrouping: MenuBarGrouping
     public init(enabled: Set<Metric> = Set(Metric.allCases), order: [Metric] = Metric.allCases,
-                interval: Int = 2, interface: String? = nil) {
+                interval: Int = 2, interface: String? = nil, storageInterval: Int = 30,
+                menuBarGrouping: MenuBarGrouping = MenuBarGrouping()) {
         self.enabled = enabled
         var seen: Set<Metric> = []
         self.order = (order + Metric.allCases).filter { seen.insert($0).inserted }
-        self.interval = [1, 2, 5].contains(interval) ? interval : 2
+        self.interval = [1, 2, 3, 5].contains(interval) ? interval : 2
         self.interface = interface
+        self.storageInterval = StoragePollingInterval(rawValue: storageInterval)?.rawValue ?? 30
+        self.menuBarGrouping = menuBarGrouping
     }
     public var visible: [Metric] { order.filter { enabled.contains($0) } }
+    public var needsStorageCapacity: Bool {
+        enabled.contains(.ssd)
+    }
 }
 
 /// Raw identifiers allow older builds to ignore settings for unknown future metrics.
 public struct SettingsRecord: Codable, Sendable {
-    public var version: Int = 1
+    public var version: Int = 2
     public var enabled: [String]?
     public var order: [String]?
     public var interval: Int?
     public var interface: String?
+    public var showsMemoryStorage: Bool?
+    public var storageInterval: Int?
+    public var menuBarGrouping: MenuBarGrouping?
     public init(configuration: MonitorConfiguration) {
         enabled = configuration.enabled.map(\.rawValue).sorted()
         order = configuration.order.map(\.rawValue)
         interval = configuration.interval
         interface = configuration.interface
+        storageInterval = configuration.storageInterval
+        menuBarGrouping = configuration.menuBarGrouping
     }
     public var configuration: MonitorConfiguration {
-        MonitorConfiguration(
-            enabled: enabled.map { Set($0.compactMap(Metric.init(rawValue:))) } ?? Set(Metric.allCases),
-            order: order?.compactMap(Metric.init(rawValue:)) ?? Metric.allCases,
-            interval: interval ?? 2, interface: interface
+        var selected = enabled.map { Set($0.compactMap(Metric.init(rawValue:))) } ?? Set(Metric.allCases)
+        var placement = order?.compactMap(Metric.init(rawValue:)) ?? Metric.allCases
+        if version < 2, !selected.contains(.ssd) {
+            if selected.contains(.memory), showsMemoryStorage ?? true { selected.insert(.ssd) }
+        }
+        if !placement.contains(.ssd), let index = placement.firstIndex(of: .memory) {
+            placement.insert(.ssd, at: index + 1)
+        }
+        return MonitorConfiguration(
+            enabled: selected, order: placement,
+            interval: interval ?? 2, interface: interface, storageInterval: storageInterval ?? 30,
+            menuBarGrouping: menuBarGrouping ?? MenuBarGrouping()
         )
     }
 }
@@ -67,11 +88,25 @@ public struct MemoryReading: Sendable {
     public let wired: Double
     public let compressed: Double
     public let swap: Double?
+    public let swapTotal: Double?
+    public let pressure: MemoryPressure?
     public var used: Double { app + wired + compressed }
+    public var available: Double { max(0, total - used) }
     public var percent: Double { min(100, max(0, used / total * 100)) }
-    public init(total: Double, app: Double, wired: Double, compressed: Double, swap: Double?) {
+    public var swapPercent: Double? {
+        guard let swap, let swapTotal, swap.isFinite, swapTotal.isFinite,
+              swap >= 0, swapTotal >= 0 else { return nil }
+        guard swapTotal > 0 else { return swap == 0 ? 0 : nil }
+        return min(100, swap / swapTotal * 100)
+    }
+    public var swapAvailable: Double? {
+        guard swapPercent != nil, let swap, let swapTotal else { return nil }
+        return max(0, swapTotal - swap)
+    }
+    public init(total: Double, app: Double, wired: Double, compressed: Double, swap: Double?,
+                swapTotal: Double? = nil, pressure: MemoryPressure? = nil) {
         self.total = total; self.app = app; self.wired = wired
-        self.compressed = compressed; self.swap = swap
+        self.compressed = compressed; self.swap = swap; self.swapTotal = swapTotal; self.pressure = pressure
     }
 }
 
@@ -90,11 +125,14 @@ public struct DiskCapacityReading: Sendable {
     public let available: Double
     public let sampledAt: Date?
     public let uptime: Double?
+    public let pollingInterval: Int
     public var used: Double { max(0, total - available) }
     public var percent: Double { total > 0 ? min(100, max(0, used / total * 100)) : 0 }
-    public init(name: String, total: Double, available: Double, sampledAt: Date? = nil, uptime: Double? = nil) {
+    public init(name: String, total: Double, available: Double, sampledAt: Date? = nil, uptime: Double? = nil,
+                pollingInterval: Int = 30) {
         self.name = name; self.total = total; self.available = min(total, max(0, available))
         self.sampledAt = sampledAt; self.uptime = uptime
+        self.pollingInterval = pollingInterval
     }
 }
 
@@ -139,13 +177,14 @@ public struct GPUReading: Sendable {
 public enum ReadingValue: Sendable {
     case cpu(Double)
     case memory(MemoryReading)
+    case storage(DiskCapacityReading)
     case network(NetworkReading)
     case disk(DiskReading)
     case power(PowerReading)
     case gpu(GPUReading)
     public var primary: Double? {
         switch self {
-        case .cpu(let value): value; case .memory(let value): value.percent; case .network(let value): value.download
+        case .cpu(let value): value; case .memory(let value): value.percent; case .storage(let value): value.percent; case .network(let value): value.download
         case .disk(let value): value.activity?.read; case .power(let value): value.watts; case .gpu(let value): value.utilization
         }
     }

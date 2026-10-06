@@ -10,6 +10,7 @@ let package = Package(
         .target(name: "LookoutCore"),
         .executableTarget(name: "Lookout", dependencies: ["LookoutCore", .product(name: "Sparkle", package: "Sparkle")],
                           linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]),
-        .testTarget(name: "LookoutCoreTests", dependencies: ["LookoutCore"])
+        .testTarget(name: "LookoutCoreTests", dependencies: ["LookoutCore"]),
+        .testTarget(name: "LookoutTests", dependencies: ["Lookout"])
     ]
 )

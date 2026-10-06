@@ -22,6 +22,7 @@ struct ProcessListDisclosure: View {
         switch metric {
         case .cpu: "CPU 사용률순 · 코어 1개 = 100%"
         case .memory: "메모리 점유량순"
+        case .ssd: "저장공간은 프로세스 목록을 제공하지 않습니다."
         case .disk: "읽기 + 쓰기 속도순 · 전체 디스크"
         case .network: "다운로드 + 업로드 속도순 · 전체 인터페이스"
         case .gpu: "GPU 실행 시간 비율순 · 드라이버 추정치"
@@ -39,16 +40,21 @@ struct ProcessListDisclosure: View {
                     } else if list.processes.isEmpty {
                         Text("현재 측정 구간의 사용 없음").foregroundStyle(.secondary)
                     } else {
-                        ForEach(list.processes) { process in
-                            HStack(spacing: 8) {
-                                Text(process.name).lineLimit(1).truncationMode(.middle)
+                        if expanded && visible {
+                            ForEach(list.processes) { process in
+                                HStack(spacing: 8) {
+                                    HStack(spacing: 5) {
+                                        ProcessIcon(id: process.id)
+                                        Text(process.name).lineLimit(1).truncationMode(.middle)
+                                    }
                                     .help("\(process.name) · PID \(process.id.pid)")
-                                Spacer(minLength: 0)
-                                Text(value(process)).monospacedDigit().fixedSize()
+                                    Spacer(minLength: 0)
+                                    Text(value(process)).monospacedDigit().fixedSize()
+                                }
+                                .accessibilityElement(children: .ignore)
+                                .accessibilityLabel("\(process.name), PID \(process.id.pid)")
+                                .accessibilityValue(value(process))
                             }
-                            .accessibilityElement(children: .ignore)
-                            .accessibilityLabel("\(process.name), PID \(process.id.pid)")
-                            .accessibilityValue(value(process))
                         }
                         Text("접근 가능한 프로세스 중 상위 \(list.processes.count)개")
                             .font(.system(size: 9)).foregroundStyle(.secondary)
@@ -82,6 +88,7 @@ struct ProcessListDisclosure: View {
         switch metric {
         case .cpu, .gpu: String(format: "%.1f%%", process.primary)
         case .memory: ValueFormat.memory(process.primary)
+        case .ssd: "—"
         case .disk: "R \(ValueFormat.rate(process.primary))  W \(ValueFormat.rate(process.secondary ?? 0))"
         case .network: "↓ \(ValueFormat.rate(process.primary))  ↑ \(ValueFormat.rate(process.secondary ?? 0))"
         case .power: ValueFormat.watts(process.primary)

@@ -25,10 +25,10 @@ public enum MenuBarDensity: String, CaseIterable, Sendable, Identifiable {
         case .compact: limit = 2
         case .minimal: limit = 1
         case .normal: return visible
-        case .automatic: limit = automaticLimit ?? visible.count
+        case .automatic: limit = automaticLimit ?? configuration.menuBarGrouping.units(metrics: visible).count
         }
-        let ranked = Self.normalizedPriority(priority).filter { configuration.enabled.contains($0) }
-        let retained = Set(ranked.prefix(max(1, limit)))
+        let ranked = configuration.menuBarGrouping.rankedUnits(configuration: configuration, priority: priority)
+        let retained = Set(ranked.prefix(max(1, limit)).flatMap(\.metrics))
         return visible.filter { retained.contains($0) }
     }
     public static func normalizedPriority(_ priority: [Metric]) -> [Metric] {

@@ -1,9 +1,53 @@
 import Foundation
-import LookoutCore
+@testable import LookoutCore
 import Testing
 
 private func counter(_ time: Double, id: UInt64 = 1, read: UInt64 = 100, write: UInt64 = 200) -> DiskCounter {
     DiskCounter(devices: [DiskDeviceCounter(id: id, read: read, write: write)], uptime: time)
+}
+@Test func storagePollingChangesInvalidateCacheAndDiskActivityRemainsIndependent() {
+    var state = DiskSamplingState(), capacityCalls = 0, activityCalls = 0
+    func sample(_ time: Double, interval: Int = 300, capacity: Bool = true, activity: Bool = false) -> DiskReading {
+        state.sample(uptime: time, date: Date(timeIntervalSince1970: time), readCapacity: {
+            capacityCalls += 1
+            return DiskReading(name: "Data", total: 1000, available: Double(capacityCalls * 100))
+        }, readCounters: {
+            activityCalls += 1; return counter(time)
+        }, collectActivity: activity, collectCapacity: capacity, capacityInterval: interval)
+    }
+    #expect(sample(0).capacity?.pollingInterval == 300)
+    _ = sample(30); _ = sample(299)
+    #expect(capacityCalls == 1 && activityCalls == 0)
+    #expect(sample(300).capacity?.available == 200 && capacityCalls == 2)
+    #expect(sample(301, interval: 600).capacity?.available == 300 && capacityCalls == 3)
+    let io = sample(302, interval: 600, capacity: false, activity: true)
+    #expect(io.capacity == nil && capacityCalls == 3 && activityCalls == 1)
+    #expect(sample(303, interval: 600, capacity: false, activity: true).activity?.read == 0)
+    #expect(sample(304, interval: 600).capacity?.available == 400 && capacityCalls == 4)
+    #expect(sample(305, interval: 1800).capacity?.pollingInterval == 1800 && capacityCalls == 5)
+    _ = sample(2104, interval: 1800, activity: true)
+    #expect(capacityCalls == 5 && activityCalls == 3)
+    #expect(sample(2105, interval: 1800).capacity?.available == 600 && capacityCalls == 6)
+}
+
+@Test func storageCapacityIncludesReclaimableSpaceWithValidFallback() throws {
+    let available = try SystemMetrics.availableStorageCapacity(total: 1000, free: 100, important: 300)
+    let disk = DiskReading(name: "Data", total: 1000, available: available)
+    #expect(disk.available == 300 && disk.used == 700 && disk.percent == 70)
+    for important: Int64? in [nil, -1, 1001, 50] {
+        #expect(try SystemMetrics.availableStorageCapacity(total: 1000, free: 100, important: important) == 100)
+    }
+    #expect(try SystemMetrics.availableStorageCapacity(total: 1000, free: nil, important: 300) == 300)
+    #expect(try SystemMetrics.availableStorageCapacity(total: 1000, free: 0, important: 0) == 0)
+    #expect(throws: CollectionError.self) {
+        try SystemMetrics.availableStorageCapacity(total: 1000, free: nil, important: nil)
+    }
+    #expect(throws: CollectionError.self) {
+        try SystemMetrics.availableStorageCapacity(total: 1000, free: -1, important: 2000)
+    }
+    #expect(throws: CollectionError.self) {
+        try SystemMetrics.availableStorageCapacity(total: 0, free: 0, important: 0)
+    }
 }
 @Test func diskRatesUseRealElapsedTimeAndResetOnDeviceOrCounterChanges() {
     let first = counter(10)
@@ -55,6 +99,47 @@ private func counter(_ time: Double, id: UInt64 = 1, read: UInt64 = 100, write: 
     #expect(failedCapacity.capacityMessage == "Capacity unavailable")
     #expect(state.sample(uptime: 60, date: date, readCapacity: capacity, readCounters: { counter(60) }).capacity != nil)
 }
+@Test func memoryStorageSharesCapacityCacheWithoutReadingDisabledDiskActivity() {
+    var state = DiskSamplingState(), capacityCalls = 0, activityCalls = 0
+    func sample(_ time: Double, activity: Bool) -> DiskReading {
+        state.sample(uptime: time, date: Date(timeIntervalSince1970: time), readCapacity: {
+            capacityCalls += 1
+            return DiskReading(name: "Data", total: 1000, available: Double(capacityCalls * 100))
+        }, readCounters: {
+            activityCalls += 1
+            return counter(time)
+        }, collectActivity: activity)
+    }
+    let first = sample(0, activity: false)
+    #expect(first.capacity?.used == 900 && first.capacity?.available == 100)
+    #expect(first.activity == nil && first.activityMessage == nil)
+    #expect(sample(2, activity: false).capacity?.sampledAt == first.capacity?.sampledAt)
+    #expect(capacityCalls == 1 && activityCalls == 0)
+    #expect(sample(4, activity: true).activity == nil)
+    #expect(sample(6, activity: true).activity?.read == 0)
+    #expect(capacityCalls == 1 && activityCalls == 2)
+    #expect(sample(8, activity: false).activity == nil)
+    #expect(activityCalls == 2)
+    // Re-enabling I/O starts a fresh baseline, while capacity remains shared.
+    #expect(sample(10, activity: true).activity == nil)
+    #expect(sample(30, activity: false).capacity?.available == 200)
+    #expect(capacityCalls == 2 && activityCalls == 3)
+}
+
+@Test func unavailableSSDDoesNotHideMemoryUsageOrReuseOldCapacity() {
+    var state = DiskSamplingState()
+    _ = state.sample(uptime: 0, date: Date(), readCapacity: {
+        DiskReading(name: "Data", total: 1000, available: 200)
+    }, readCounters: { counter(0) }, collectActivity: false)
+    let failed = state.sample(uptime: 30, date: Date(), readCapacity: {
+        throw CollectionError.system("SSD unavailable")
+    }, readCounters: { counter(30) }, collectActivity: false)
+    let memory = MemoryReading(total: 1000, app: 400, wired: 200, compressed: 100, swap: nil)
+    #expect(memory.used == 700 && memory.percent == 70)
+    #expect(failed.capacity == nil && failed.capacityMessage == "SSD unavailable")
+    #expect(ReadingValue.memory(memory).primary == 70)
+}
+
 @Test func diskHistoryTracksTwoRatesAndLeavesGapsWithoutActivity() {
     var history = HistoryBuffer()
     let end = Date(timeIntervalSince1970: 1000)
@@ -73,15 +158,15 @@ private func counter(_ time: Double, id: UInt64 = 1, read: UInt64 = 100, write: 
 }
 @Test func diskAlertsRequireFreshCapacityConfirmationAndKeepCapacityScope() {
     var engine = AlertEngine()
-    var rule = AlertRule(metric: .disk, threshold: 20, duration: 10)
+    var rule = AlertRule(metric: .ssd, threshold: 20, duration: 10)
     rule.enabled = true
     let config = AlertConfiguration(rules: [rule])
     func evaluate(_ now: Double, observed: Double, free: Double?) {
         let capacity = free.map { DiskCapacityReading(name: "Data", total: 1e12, available: $0 * 1e9,
             sampledAt: Date(timeIntervalSince1970: observed), uptime: observed) }
-        engine.evaluate([MetricReading(metric: .disk, date: Date(timeIntervalSince1970: now),
-            value: .disk(DiskReading(capacity: capacity, activity: DiskActivityReading(read: 1e6, write: 1e6))))],
-            configuration: config, monitored: [.disk], uptime: now, interval: 2)
+        engine.evaluate([MetricReading(metric: .ssd, date: Date(timeIntervalSince1970: now),
+            value: capacity.map(ReadingValue.storage))],
+            configuration: config, monitored: [.ssd], uptime: now, interval: 2)
     }
     evaluate(0, observed: 0, free: 10)
     evaluate(12, observed: 0, free: 10)

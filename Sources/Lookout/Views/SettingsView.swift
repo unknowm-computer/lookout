@@ -58,26 +58,52 @@ struct SettingsView: View {
                         )).toggleStyle(.checkbox)
                             .disabled(!settings.capabilities.supports(metric))
                             .fixedSize(horizontal: true, vertical: false)
+                        if metric == .memory {
+                            Toggle("Swap 상세", isOn: Binding(
+                                get: { settings.showsSwapDetails },
+                                set: { settings.setShowsSwapDetails($0) }
+                            )).toggleStyle(.checkbox)
+                                .font(.system(size: 10))
+                                .fixedSize(horizontal: true, vertical: false)
+                                .disabled(!settings.configuration.enabled.contains(.memory))
+                                .help("체크하면 Swap 바 그래프와 사용·할당 여유를 표시합니다. 해제하면 사용량/현재 할당량 한 줄만 표시합니다.")
+                        }
                         Spacer(minLength: 8)
-                        Text("그래프").font(.system(size: 10)).foregroundStyle(.secondary).fixedSize()
-                        Picker("\(metric.title) 그래프 형식", selection: Binding(
-                            get: { settings.charts.style(for: metric) },
-                            set: { settings.setChartStyle($0, for: metric) }
-                        )) {
-                            ForEach(ChartStyle.allCases) { Text($0.title).tag($0) }
-                        }.labelsHidden().frame(width: 110)
-                            .disabled(!settings.configuration.enabled.contains(metric))
+                        if metric == .ssd {
+                            Text("체크 주기").font(.system(size: 10)).foregroundStyle(.secondary).fixedSize()
+                            Picker("SSD 체크 주기", selection: Binding(
+                                get: { settings.configuration.storageInterval },
+                                set: { settings.setStorageInterval($0) }
+                            )) {
+                                ForEach(StoragePollingInterval.allCases) { Text($0.title).tag($0.rawValue) }
+                            }.labelsHidden().frame(width: 110)
+                                .disabled(!settings.configuration.enabled.contains(.ssd))
+                        } else {
+                            Text("그래프").font(.system(size: 10)).foregroundStyle(.secondary).fixedSize()
+                            Picker("\(metric.title) 그래프 형식", selection: Binding(
+                                get: { settings.charts.style(for: metric) },
+                                set: { settings.setChartStyle($0, for: metric) }
+                            )) {
+                                ForEach(ChartStyle.available(for: metric)) { Text($0.title).tag($0) }
+                            }.labelsHidden().frame(width: 110)
+                                .disabled(!settings.configuration.enabled.contains(metric))
+                        }
                     }.padding(4)
                 }.background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
                 Text("오른쪽 손잡이를 드래그하여 배치 순서를 바꿉니다. 끄면 표시와 데이터 수집이 함께 중단됩니다.")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
             }
-            HStack {
-                Text("갱신 주기")
-                Spacer()
-                Picker("갱신 주기", selection: Binding(get: { settings.configuration.interval }, set: { settings.setInterval($0) })) {
-                    Text("1초").tag(1); Text("2초").tag(2); Text("5초").tag(5)
-                }.labelsHidden().frame(width: 160)
+            VStack(alignment: .leading, spacing: 7) {
+                HStack {
+                    Text("갱신 주기")
+                    Spacer()
+                    Picker("갱신 주기", selection: Binding(get: { settings.configuration.interval }, set: { settings.setInterval($0) })) {
+                        Text("1초").tag(1); Text("2초").tag(2); Text("3초").tag(3); Text("5초").tag(5)
+                    }.labelsHidden().frame(width: 160)
+                }
+                Text("SSD 저장공간은 위 SSD 항목의 설정을 따릅니다.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             VStack(alignment: .leading, spacing: 7) {
                 HStack {

@@ -44,7 +44,7 @@ private struct AlertRuleView: View {
     private var rule: AlertRule { settings.alerts.rule(for: metric) }
     private var monitored: Bool { settings.configuration.enabled.contains(metric) }
     private var title: String {
-        switch metric { case .disk: "디스크 여유 공간"; default: "\(metric.title) 사용률" }
+        switch metric { case .ssd: "SSD 여유 공간"; default: "\(metric.title) 사용률" }
     }
     private var threshold: Binding<Double> {
         Binding(get: { rule.threshold }, set: { value in settings.updateAlert(metric) { $0.threshold = value } })

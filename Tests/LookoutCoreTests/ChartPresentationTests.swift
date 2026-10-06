@@ -2,6 +2,22 @@ import Foundation
 import LookoutCore
 import Testing
 
+@Test func memoryChartChoicesRecoverLegacyLineWithoutChangingOtherMetrics() {
+    #expect(ChartStyle.available(for: .memory) == [.automatic, .bar, .gauge])
+    #expect(ChartStyle.available(for: .cpu).contains(.line))
+    let saved = ChartPreferences(styles: ["memory": "line", "cpu": "line", "network": "gauge"])
+    #expect(saved.style(for: .memory) == .automatic)
+    #expect(saved.normalized.styles["memory"] == nil)
+    #expect(saved.normalized.style(for: .cpu) == .line)
+    #expect(saved.normalized.style(for: .network) == .gauge)
+    #expect(ChartStyle.line.resolved(for: .memory) == .bar)
+    var preferences = saved.normalized
+    preferences.set(.gauge, for: .memory)
+    #expect(preferences.style(for: .memory) == .gauge)
+    preferences.set(.line, for: .memory)
+    #expect(preferences.style(for: .memory) == .automatic)
+}
+
 @Test func graphSettingsRecoverUnknownValuesAndKeepOtherSelections() throws {
     let data = Data(#"{"styles":{"cpu":"bar","memory":"future","network":"line","future":"gauge"}}"#.utf8)
     var preferences = try JSONDecoder().decode(ChartPreferences.self, from: data).normalized

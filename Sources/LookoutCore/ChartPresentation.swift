@@ -6,11 +6,16 @@ public enum ChartStyle: String, CaseIterable, Codable, Sendable, Identifiable {
     public var title: String {
         switch self { case .automatic: "자동"; case .line: "라인"; case .bar: "바"; case .gauge: "게이지" }
     }
+    public static func available(for metric: Metric) -> [ChartStyle] {
+        metric == .memory ? [.automatic, .bar, .gauge] : allCases
+    }
     public func resolved(for metric: Metric) -> ChartStyle {
+        if metric == .ssd { return .bar }
+        if metric == .memory, self == .line { return .bar }
         guard self == .automatic else { return self }
         switch metric {
         case .cpu, .gpu: return .gauge
-        case .memory: return .bar
+        case .memory, .ssd: return .bar
         case .network, .disk, .power: return .line
         }
     }
@@ -21,14 +26,17 @@ public struct ChartPreferences: Codable, Equatable, Sendable {
     public var styles: [String: String]
     public init(styles: [String: String] = [:]) { self.styles = styles }
     public func style(for metric: Metric) -> ChartStyle {
-        styles[metric.rawValue].flatMap(ChartStyle.init(rawValue:)) ?? .automatic
+        guard let style = styles[metric.rawValue].flatMap(ChartStyle.init(rawValue:)),
+              ChartStyle.available(for: metric).contains(style) else { return .automatic }
+        return style
     }
     public mutating func set(_ style: ChartStyle, for metric: Metric) {
-        styles[metric.rawValue] = style == .automatic ? nil : style.rawValue
+        styles[metric.rawValue] = style == .automatic || !ChartStyle.available(for: metric).contains(style) ? nil : style.rawValue
     }
     public var normalized: ChartPreferences {
         ChartPreferences(styles: styles.filter {
-            Metric(rawValue: $0.key) != nil && ChartStyle(rawValue: $0.value) != nil && $0.value != ChartStyle.automatic.rawValue
+            guard let metric = Metric(rawValue: $0.key), let style = ChartStyle(rawValue: $0.value) else { return false }
+            return style != .automatic && ChartStyle.available(for: metric).contains(style)
         })
     }
 }

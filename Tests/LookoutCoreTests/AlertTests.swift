@@ -137,12 +137,12 @@ private func evaluate(_ engine: inout AlertEngine, _ value: Double?, at time: Do
     #expect(engine.evaluate(readings, configuration: config, monitored: [.power], uptime: 0, interval: 2).isEmpty)
 }
 
-@Test func diskAlertUsesFreeGBRatherThanUsedPercent() {
+@Test func ssdAlertUsesFreeGBRatherThanUsedPercent() {
     var engine = AlertEngine()
-    let config = ruleConfig(.disk, threshold: 20, duration: 0)
+    let config = ruleConfig(.ssd, threshold: 20, duration: 0)
     func check(_ free: Double, at time: Double) -> [AlertEvent] {
-        engine.evaluate([sample(.disk, .disk(DiskReading(name: "Data", total: 1e12, available: free * 1e9)), at: time)],
-                        configuration: config, monitored: [.disk], uptime: time, interval: 5)
+        engine.evaluate([sample(.ssd, .storage(DiskCapacityReading(name: "Data", total: 1e12, available: free * 1e9)), at: time)],
+                        configuration: config, monitored: [.ssd], uptime: time, interval: 5)
     }
     #expect(check(20, at: 0).isEmpty)
     #expect(check(19, at: 5).count == 1)

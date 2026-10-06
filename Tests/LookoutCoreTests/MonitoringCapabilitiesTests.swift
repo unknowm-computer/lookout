@@ -11,7 +11,7 @@ import Testing
     #expect(filtered.interval == 5 && filtered.interface == "en1")
     #expect(original.enabled.contains(.power))
     #expect(!intel.supports(.power))
-    #expect(Metric.allCases.filter { intel.supports($0) }.count == 5)
+    #expect(Metric.allCases.filter { intel.supports($0) }.count == 6)
     #expect(MonitoringCapabilities(supportsProcessEnergy: true).applying(to: original) == original)
     #expect(intel.applying(to: MonitorConfiguration(enabled: [])).enabled.isEmpty)
 }

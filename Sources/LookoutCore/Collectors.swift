@@ -74,10 +74,15 @@ public enum SystemMetrics {
         var swap = xsw_usage()
         var size = MemoryLayout<xsw_usage>.size
         let swapResult = sysctlbyname("vm.swapusage", &swap, &size, nil, 0)
+        var pressure: UInt32 = 0
+        var pressureSize = MemoryLayout<UInt32>.size
+        let pressureResult = sysctlbyname("kern.memorystatus_vm_pressure_level", &pressure, &pressureSize, nil, 0)
         return MemoryReading(total: Double(ProcessInfo.processInfo.physicalMemory), app: app,
                              wired: Double(info.wire_count) * page,
                              compressed: Double(info.compressor_page_count) * page,
-                             swap: swapResult == 0 ? Double(swap.xsu_used) : nil)
+                             swap: swapResult == 0 ? Double(swap.xsu_used) : nil,
+                             swapTotal: swapResult == 0 ? Double(swap.xsu_total) : nil,
+                             pressure: pressureResult == 0 ? MemoryPressure(rawValue: pressure) : nil)
     }
 
     public static func primaryInterface() -> String? {
@@ -138,9 +143,15 @@ public actor MetricSampler {
         let config = capabilities.applying(to: config)
         if !config.enabled.contains(.cpu) { previousCPU = nil }
         if !config.enabled.contains(.network) || config.interface != configuration.interface { previousNetwork = nil }
-        if !config.enabled.contains(.disk) { diskState.reset() }
+        if !config.needsStorageCapacity && !config.enabled.contains(.disk) { diskState.reset() }
         if !config.enabled.contains(.power) { energyCollector.reset() }
         configuration = config
+        // SSD capacity and disk I/O have independent demand and polling intervals.
+        let disk = !config.needsStorageCapacity && !config.enabled.contains(.disk) ? nil :
+            diskState.sample(uptime: ProcessInfo.processInfo.systemUptime, date: date,
+                             readCapacity: { try SystemMetrics.disk() }, readCounters: { try SystemMetrics.diskCounters() },
+                             collectActivity: config.enabled.contains(.disk), collectCapacity: config.needsStorageCapacity,
+                             capacityInterval: config.storageInterval)
         return config.visible.map { metric in
             counts[metric, default: 0] += 1
             do {
@@ -153,9 +164,11 @@ public actor MetricSampler {
                                          message: value == nil ? "다음 측정을 기다리는 중" : nil)
                 case .memory:
                     return MetricReading(metric: metric, date: date, value: .memory(try SystemMetrics.memory()))
+                case .ssd:
+                    return MetricReading(metric: metric, date: date, value: disk?.capacity.map(ReadingValue.storage),
+                                         message: disk?.capacityMessage)
                 case .disk:
-                    return MetricReading(metric: metric, date: date, value: .disk(diskState.sample(uptime: ProcessInfo.processInfo.systemUptime, date: date,
-                        readCapacity: { try SystemMetrics.disk() }, readCounters: { try SystemMetrics.diskCounters() })))
+                    return MetricReading(metric: metric, date: date, value: disk.map(ReadingValue.disk))
                 case .power:
                     return MetricReading(metric: metric, date: date, value: .power(try energyCollector.collect()))
                 case .gpu:

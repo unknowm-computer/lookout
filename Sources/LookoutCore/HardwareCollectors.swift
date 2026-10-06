@@ -5,13 +5,29 @@ extension SystemMetrics {
     /// APFS's writable Data volume shares the startup container's free space.
     public static func disk() throws -> DiskReading {
         let path = startupDataPath
-        let values = try URL(fileURLWithPath: path).resourceValues(forKeys: [
+        let url = URL(fileURLWithPath: path)
+        let values = try url.resourceValues(forKeys: [
             .volumeNameKey, .volumeTotalCapacityKey, .volumeAvailableCapacityKey
         ])
-        guard let total = values.volumeTotalCapacity, let available = values.volumeAvailableCapacity, total > 0 else {
+        guard let total = values.volumeTotalCapacity, total > 0 else {
             throw CollectionError.system("시작 디스크 용량을 읽을 수 없습니다.")
         }
-        return DiskReading(name: values.volumeName ?? "시작 디스크", total: Double(total), available: Double(available))
+        // Query separately so an unsupported reclaimable-capacity API does not lose basic capacity.
+        let reclaimableValues = try? url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+        let available = try availableStorageCapacity(total: total, free: values.volumeAvailableCapacity,
+            important: reclaimableValues?.volumeAvailableCapacityForImportantUsage)
+        return DiskReading(name: values.volumeName ?? "시작 디스크", total: Double(total), available: available)
+    }
+
+    /// Include macOS-reclaimable storage, as Storage settings does, without estimating caches ourselves.
+    static func availableStorageCapacity(total: Int, free: Int?, important: Int64?) throws -> Double {
+        guard total > 0 else { throw CollectionError.system("시작 디스크 용량을 읽을 수 없습니다.") }
+        let validFree = free.flatMap { (0...total).contains($0) ? $0 : nil }
+        if let important, important >= Int64(validFree ?? 0), important <= Int64(total) {
+            return Double(important)
+        }
+        guard let validFree else { throw CollectionError.system("시작 디스크 여유 공간을 읽을 수 없습니다.") }
+        return Double(validFree)
     }
 
     /// Driver-provided statistics are optional and do not have a stable public schema.

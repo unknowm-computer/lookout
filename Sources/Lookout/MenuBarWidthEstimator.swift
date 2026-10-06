@@ -10,33 +10,38 @@ import LookoutCore
         let alertMetrics: Set<Metric>
         let padding: Double
         let gap: Double
+        let values: MenuBarValuePreferences
     }
     private var key: Key?
     private var cached: [Double] = []
 
     func widths(settings: SettingsStore, measurement: MenuBarGeometry.Measurement) -> [Double] {
-        let ranked = settings.menuBarPriority.filter { settings.configuration.enabled.contains($0) }
+        let ranked = settings.configuration.menuBarGrouping.rankedUnits(
+            configuration: settings.configuration, priority: settings.menuBarPriority)
         let alerts = Set(Metric.allCases.filter { settings.alerts.hasEnabledRules(monitored: [$0]) })
-        let nextKey = Key(configuration: settings.configuration, priority: ranked,
+        let nextKey = Key(configuration: settings.configuration, priority: settings.menuBarPriority,
                           mode: settings.menuBarDisplayMode, alertMetrics: alerts,
-                          padding: measurement.padding, gap: measurement.gap)
+                          padding: measurement.padding, gap: measurement.gap, values: settings.menuBarValues)
         if key == nextKey { return cached }
         key = nextKey
         guard !ranked.isEmpty else { cached = []; return cached }
         var previousWidth = 0.0
         cached = (1...ranked.count).map { count in
             let metrics = MenuBarDensity.automatic.metrics(configuration: settings.configuration,
-                priority: ranked, automaticLimit: count)
+                priority: settings.menuBarPriority, automaticLimit: count)
             let total: Double
             if settings.menuBarDisplayMode == .individual {
-                total = metrics.reduce(0) { sum, metric in
-                    let image = MenuBarRenderer.image(metrics: [metric], readings: [:],
-                        showAlertSlot: alerts.contains(metric), compact: true)
+                let units = settings.configuration.menuBarGrouping.units(metrics: metrics)
+                total = units.reduce(0) { sum, unit in
+                    let image = MenuBarRenderer.image(metrics: unit.metrics, readings: [:],
+                        showAlertSlot: !alerts.isDisjoint(with: unit.metrics), compact: true,
+                        grouping: settings.configuration.menuBarGrouping, values: settings.menuBarValues)
                     return sum + image.size.width + measurement.padding
                 } + Double(max(0, count - 1)) * measurement.gap
             } else {
                 total = MenuBarRenderer.image(metrics: metrics, readings: [:],
-                    showAlertSlot: !alerts.isDisjoint(with: settings.configuration.enabled)).size.width
+                    showAlertSlot: !alerts.isDisjoint(with: settings.configuration.enabled),
+                    grouping: settings.configuration.menuBarGrouping, values: settings.menuBarValues).size.width
                     + measurement.padding
             }
             defer { previousWidth = total }

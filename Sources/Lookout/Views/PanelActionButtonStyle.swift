@@ -5,8 +5,10 @@ import SwiftUI
 struct PanelActionButtonStyle: ButtonStyle {
     var prominent = false
     var borderless = false
+    var horizontalPadding: CGFloat = 8
     func makeBody(configuration: Configuration) -> some View {
-        PanelActionButtonBody(configuration: configuration, prominent: prominent, borderless: borderless)
+        PanelActionButtonBody(configuration: configuration, prominent: prominent, borderless: borderless,
+                              horizontalPadding: horizontalPadding)
     }
 }
 
@@ -14,6 +16,7 @@ private struct PanelActionButtonBody: View {
     let configuration: ButtonStyleConfiguration
     let prominent: Bool
     let borderless: Bool
+    let horizontalPadding: CGFloat
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.isFocused) private var isFocused
     @Environment(\.colorScheme) private var colorScheme
@@ -30,7 +33,7 @@ private struct PanelActionButtonBody: View {
     var body: some View {
         configuration.label
             .foregroundStyle(isEnabled ? (prominent ? Color.white : Color.primary) : Color.secondary)
-            .padding(.horizontal, 8).padding(.vertical, 4)
+            .padding(.horizontal, horizontalPadding).padding(.vertical, 4)
             .background {
                 RoundedRectangle(cornerRadius: 5)
                     .fill(prominent ? Color.accentColor : (borderless ? Color.clear : (colorScheme == .light ? Color.white : Color(nsColor: .controlBackgroundColor))))

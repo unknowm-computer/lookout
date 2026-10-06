@@ -8,18 +8,23 @@ struct MetricVisualization: View {
     let end: Date
     let preference: ChartStyle
     let color: Color
+    let showsSwapDetails: Bool
     @State private var historyExpanded: Bool
     init(metric: Metric, reading: MetricReading?, history: [HistoryPoint], end: Date,
-         preference: ChartStyle, color: Color) {
+         preference: ChartStyle, color: Color, showsSwapDetails: Bool = false) {
         self.metric = metric; self.reading = reading; self.history = history; self.end = end
         self.preference = preference; self.color = color
+        self.showsSwapDetails = showsSwapDetails
         _historyExpanded = State(initialValue: [.cpu, .gpu, .memory].contains(metric))
     }
     private var style: ChartStyle { preference.resolved(for: metric) }
     private var showsHistoryBars: Bool { style == .bar && [.cpu, .gpu, .network].contains(metric) }
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if metric == .disk {
+            if metric == .memory {
+                MemoryMetricVisualization(reading: reading, history: history, end: end, style: style,
+                                          showsSwapDetails: showsSwapDetails)
+            } else if metric == .disk {
                 DiskVisualization(reading: reading, history: history, end: end, style: style, color: color)
             } else if metric == .power {
                 EnergyVisualization(reading: reading, history: history, end: end, style: style, color: color)
@@ -48,16 +53,17 @@ struct MetricVisualization: View {
     }
 }
 
-private struct PercentGaugeHistory: View {
+struct PercentGaugeHistory: View {
     let metric: Metric
     let value: Double?
     let history: [HistoryPoint]
     let end: Date
     let color: Color
+    var segments: [UsageBarSegment]? = nil
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack(alignment: .bottom, spacing: 14) {
-                PercentGauge(value: value, color: color).frame(width: 108, height: 66)
+                PercentGauge(value: value, color: color, segments: segments).frame(width: 108, height: 66)
                 VStack(alignment: .leading, spacing: 5) {
                     Text("최근 5분 기록").font(.system(size: 9)).foregroundStyle(.secondary)
                     MetricChart(metric: metric, history: history, end: end, color: color).frame(height: 50)
@@ -72,7 +78,6 @@ private struct GaugeUsageSummary: View {
     let statistics: UsageStatistics
     var body: some View {
         HStack(spacing: 12) {
-            Text("최근 5분").font(.system(size: 9)).foregroundStyle(.secondary)
             Spacer(minLength: 0)
             row("평균", statistics.average)
             row("최고", statistics.maximum)
@@ -139,25 +144,113 @@ struct HistoryBarChart: View {
 private struct PercentGauge: View {
     let value: Double?
     let color: Color
+    var segments: [UsageBarSegment]? = nil
+    @State private var hoveredID: String?
+    @State private var pointer: CGPoint?
+    @State private var tooltipVisible = false
+    @State private var tooltipSize = CGSize(width: 160, height: 22)
+    @Environment(\.usageTooltipViewportSize) private var tooltipViewportSize
+    private var hoveredSegment: UsageBarSegment? { segments?.first { $0.id == hoveredID } }
     private var validValue: Double? { value.flatMap { $0.isFinite ? min(100, max(0, $0)) : nil } }
+    private var accessibilitySummary: String {
+        let usage = validValue.map(ValueFormat.percent) ?? "측정값 없음"
+        guard let segments, !segments.isEmpty else { return usage }
+        return segments.map(\.summary).joined(separator: ", ") + " · 사용률 \(usage)"
+    }
     var body: some View {
-        ZStack(alignment: .bottom) {
-            Canvas(rendersAsynchronously: true) { context, size in
-                let center = CGPoint(x: size.width / 2, y: size.height - 5)
-                let radius = min(size.width / 2 - 7, size.height - 12)
-                var track = Path()
-                track.addArc(center: center, radius: radius, startAngle: .degrees(180), endAngle: .degrees(0), clockwise: false)
-                context.stroke(track, with: .color(.secondary.opacity(0.2)), style: StrokeStyle(lineWidth: 7, lineCap: .round))
-                if let value = validValue, value > 0 {
-                    var progress = Path()
-                    progress.addArc(center: center, radius: radius, startAngle: .degrees(180), endAngle: .degrees(180 + value * 1.8), clockwise: false)
-                    context.stroke(progress, with: .color(color), style: StrokeStyle(lineWidth: 7, lineCap: .round))
+        Group {
+            if segments == nil { gaugeContent.help("현재 전체 사용률") }
+            else { gaugeContent }
+        }
+    }
+    private var gaugeContent: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .bottom) {
+                Canvas(rendersAsynchronously: true) { context, size in
+                    let gauge = UsageGaugeGeometry(size: size)
+                    let center = gauge.center, radius = gauge.radius
+                    var track = Path()
+                    track.addArc(center: center, radius: radius, startAngle: .degrees(180), endAngle: .degrees(0), clockwise: false)
+                    context.stroke(track, with: .color(.secondary.opacity(0.2)), style: StrokeStyle(lineWidth: 7, lineCap: .round))
+                    if let segments {
+                        var offset = 0.0
+                        for segment in segments {
+                            let fraction = segment.fraction.isFinite ? min(1 - offset, max(0, segment.fraction)) : 0
+                            guard fraction > 0 else { continue }
+                            var arc = Path()
+                            arc.addArc(center: center, radius: radius,
+                                       startAngle: .degrees(180 + offset * 180),
+                                       endAngle: .degrees(180 + (offset + fraction) * 180), clockwise: false)
+                            var shape = arc.strokedPath(StrokeStyle(lineWidth: 7, lineCap: .butt))
+                            if offset == 0 {
+                                shape = shape.union(Path(ellipseIn: CGRect(x: center.x - radius - 3.5, y: center.y - 3.5, width: 7, height: 7)))
+                            }
+                            offset += fraction
+                            if offset >= 1 {
+                                shape = shape.union(Path(ellipseIn: CGRect(x: center.x + radius - 3.5, y: center.y - 3.5, width: 7, height: 7)))
+                            }
+                            context.fill(shape, with: .color(segment.color))
+                        }
+                    } else if let value = validValue, value > 0 {
+                        var progress = Path()
+                        progress.addArc(center: center, radius: radius, startAngle: .degrees(180), endAngle: .degrees(180 + value * 1.8), clockwise: false)
+                        context.stroke(progress, with: .color(color), style: StrokeStyle(lineWidth: 7, lineCap: .round))
+                    }
+                }
+                Text(validValue.map(ValueFormat.percent) ?? "—").font(.system(size: 20, weight: .medium)).monospacedDigit().padding(.bottom, 3)
+            }
+            .onContinuousHover { phase in
+                switch phase {
+                case .active(let location):
+                    pointer = location
+                    updateHover(size: geometry.size)
+                case .ended: dismissTooltip()
                 }
             }
-            Text(validValue.map(ValueFormat.percent) ?? "—").font(.system(size: 20, weight: .medium)).monospacedDigit().padding(.bottom, 3)
+            .onChange(of: segments?.map(\.fraction)) { _, _ in updateHover(size: geometry.size) }
+            .overlay(alignment: .topLeading) {
+                if tooltipVisible, let hoveredSegment, let pointer {
+                    let center = tooltipCenter(pointer: pointer, geometry: geometry)
+                    UsageTooltip(summary: hoveredSegment.summary)
+                        .onGeometryChange(for: CGSize.self) { $0.size } action: { tooltipSize = $0 }
+                        .position(center)
+                        .allowsHitTesting(false)
+                }
+            }
         }
-        .accessibilityElement(children: .ignore).accessibilityLabel("현재 사용률 게이지")
-        .accessibilityValue(validValue.map(ValueFormat.percent) ?? "측정값 없음")
+        .zIndex(1)
+        .task(id: hoveredID) {
+            guard hoveredID != nil, !tooltipVisible else { return }
+            do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
+            guard !Task.isCancelled, hoveredID != nil else { return }
+            tooltipVisible = true
+        }
+        .onDisappear { dismissTooltip() }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(segments == nil ? "현재 사용률 게이지" : "메모리 구성 게이지")
+        .accessibilityValue(accessibilitySummary)
+    }
+    private func updateHover(size: CGSize) {
+        guard let pointer else { return }
+        hoveredID = UsageGaugeGeometry(size: size).segmentID(at: pointer, segments: segments ?? [])
+        if hoveredID == nil { tooltipVisible = false }
+    }
+    private func tooltipCenter(pointer: CGPoint, geometry: GeometryProxy) -> CGPoint {
+        let bounds: CGRect
+        if let viewport = tooltipViewportSize {
+            let frame = geometry.frame(in: .named(UsageTooltipSpace.viewport))
+            bounds = CGRect(x: -frame.minX + 6, y: -frame.minY + 6,
+                            width: max(0, viewport.width - 12), height: max(0, viewport.height - 12))
+        } else {
+            bounds = CGRect(x: 0, y: -32, width: max(geometry.size.width, tooltipSize.width),
+                            height: geometry.size.height + 32)
+        }
+        return UsageTooltipPlacement.center(pointer: pointer, size: tooltipSize, bounds: bounds)
+    }
+    private func dismissTooltip() {
+        pointer = nil
+        hoveredID = nil
+        tooltipVisible = false
     }
 }
 
@@ -166,12 +259,7 @@ private struct CurrentMetricBar: View {
     let value: ReadingValue?
     let color: Color
     private var segments: [(Double, Color)] {
-        switch value {
-        case .memory(let memory):
-            guard memory.total > 0 else { return [] }
-            return [(memory.app / memory.total, .purple), (memory.wired / memory.total, .cyan), (memory.compressed / memory.total, .orange)]
-        default: return value?.primary.map { [($0 / 100, color)] } ?? []
-        }
+        value?.primary.map { [($0 / 100, color)] } ?? []
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -186,32 +274,21 @@ private struct CurrentMetricBar: View {
                     x += width
                 }
             }.frame(height: 13)
-            if case .memory = value {
-                HStack(spacing: 12) {
-                    legend("앱", .purple); legend("Wired", .cyan); legend("압축", .orange); legend("여유", .secondary.opacity(0.4))
-                }
-            } else {
-                HStack {
-                    Text(value?.primary.map { "사용 \(ValueFormat.percent($0))" } ?? "측정값 없음")
-                    Spacer()
-                    if case .disk(let disk) = value { Text("여유 \(ValueFormat.storage(disk.available))") }
-                    else { Text("100%") }
-                }.font(.system(size: 9)).foregroundStyle(.secondary).monospacedDigit()
-            }
+            HStack {
+                Text(value?.primary.map { "사용 \(ValueFormat.percent($0))" } ?? "측정값 없음")
+                Spacer()
+                if case .disk(let disk) = value { Text("여유 \(ValueFormat.storage(disk.available))") }
+                else { Text("100%") }
+            }.font(.system(size: 9)).foregroundStyle(.secondary).monospacedDigit()
         }
         .accessibilityElement(children: .ignore).accessibilityLabel("\(metric.title) 현재 상태 막대")
         .accessibilityValue(accessibilitySummary)
     }
     private var accessibilitySummary: String {
         switch value {
-        case .memory(let memory): return "앱 \(ValueFormat.memory(memory.app)), Wired \(ValueFormat.memory(memory.wired)), 압축 \(ValueFormat.memory(memory.compressed)), 사용률 \(ValueFormat.percent(memory.percent))"
         case .disk(let disk): return "사용 \(ValueFormat.storage(disk.used)), 여유 \(ValueFormat.storage(disk.available))"
         default: return value?.primary.map(ValueFormat.percent) ?? "측정값 없음"
         }
-    }
-    private func legend(_ title: String, _ tint: Color) -> some View {
-        HStack(spacing: 4) { Circle().fill(tint).frame(width: 5, height: 5); Text(title) }
-            .font(.system(size: 9)).foregroundStyle(.secondary)
     }
 }
 

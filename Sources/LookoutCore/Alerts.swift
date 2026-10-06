@@ -11,26 +11,26 @@ public struct AlertRule: Codable, Equatable, Sendable, Identifiable {
     }
     public var recoveryThreshold: Double {
         switch metric {
-        case .disk: threshold + 5
+        case .ssd: threshold + 5
         default: max(0, threshold - 10)
         }
     }
     public var thresholdRange: ClosedRange<Double> {
-        switch metric { case .disk: 1...1000; default: 1...100 }
+        switch metric { case .ssd: 1...1000; default: 1...100 }
     }
-    public var unit: String { metric == .disk ? "GB" : "%" }
+    public var unit: String { metric == .ssd ? "GB" : "%" }
     public var condition: String {
-        switch metric { case .disk: "미만"; default: "이상" }
+        switch metric { case .ssd: "미만"; default: "이상" }
     }
     public var recoveryDescription: String {
-        let direction = metric == .disk ? "이상" : "이하"
+        let direction = metric == .ssd ? "이상" : "이하"
         return "\(Int(recoveryThreshold)) \(unit) \(direction) 10초 유지 시 해제"
     }
     public func isTriggered(_ value: Double) -> Bool {
-        switch metric { case .disk: value < threshold; default: value >= threshold }
+        switch metric { case .ssd: value < threshold; default: value >= threshold }
     }
     public func isRecovered(_ value: Double) -> Bool {
-        metric == .disk ? value >= recoveryThreshold : value <= recoveryThreshold
+        metric == .ssd ? value >= recoveryThreshold : value <= recoveryThreshold
     }
     fileprivate func normalized() -> AlertRule {
         var rule = self
@@ -42,11 +42,11 @@ public struct AlertRule: Codable, Equatable, Sendable, Identifiable {
 }
 
 public struct AlertConfiguration: Codable, Equatable, Sendable {
-    public static let supportedMetrics: [Metric] = [.cpu, .memory, .disk, .gpu]
+    public static let supportedMetrics: [Metric] = [.cpu, .memory, .ssd, .gpu]
     public static let defaults: [AlertRule] = [
         AlertRule(metric: .cpu, threshold: 90, duration: 30),
         AlertRule(metric: .memory, threshold: 90, duration: 60),
-        AlertRule(metric: .disk, threshold: 20, duration: 10),
+        AlertRule(metric: .ssd, threshold: 20, duration: 10),
         AlertRule(metric: .gpu, threshold: 90, duration: 30)
     ]
     public var rules: [AlertRule]
@@ -56,7 +56,12 @@ public struct AlertConfiguration: Codable, Equatable, Sendable {
     }
     public var normalized: AlertConfiguration {
         var seen: Set<String> = []
-        let rules = (rules + Self.defaults).filter {
+        let migrated = rules.map { rule in
+            var rule = rule
+            if rule.id == Metric.disk.rawValue { rule.id = Metric.ssd.rawValue }
+            return rule
+        }
+        let rules = (migrated + Self.defaults).filter {
             guard let metric = $0.metric, Self.supportedMetrics.contains(metric) else { return false }
             return seen.insert($0.id).inserted
         }.map { $0.normalized() }
@@ -79,13 +84,13 @@ public struct AlertEvent: Codable, Equatable, Sendable, Identifiable {
     public var metric: Metric { rule.metric! }
     public var title: String {
         switch metric {
-        case .disk: "디스크 여유 공간 부족"
+        case .ssd: "SSD 여유 공간 부족"
         default: "\(metric.title) 사용률 높음"
         }
     }
     public var message: String {
-        let value = metric == .disk ? String(format: "%.1f GB", value) : ValueFormat.percent(value)
-        return "\(metric == .disk ? "여유" : "사용률") \(value) · 기준 \(Int(rule.threshold)) \(rule.unit) \(rule.condition)"
+        let value = metric == .ssd ? String(format: "%.1f GB", value) : ValueFormat.percent(value)
+        return "\(metric == .ssd ? "여유" : "사용률") \(value) · 기준 \(Int(rule.threshold)) \(rule.unit) \(rule.condition)"
     }
 }
 
@@ -102,7 +107,11 @@ public struct AlertEngine: Sendable {
     }
     private var states: [Metric: State] = [:]
     public init(restored: [AlertEvent] = []) {
-        for event in restored {
+        for original in restored {
+            var rule = original.rule
+            if rule.id == Metric.disk.rawValue { rule.id = Metric.ssd.rawValue }
+            let event = AlertEvent(id: original.id, rule: rule, firstDetected: original.firstDetected,
+                                   observedAt: original.observedAt, value: original.value)
             guard let metric = event.rule.metric, AlertConfiguration.supportedMetrics.contains(metric),
                   event.rule.enabled, event.rule == event.rule.normalized(), event.value.isFinite else { continue }
             states[metric] = State(rule: event.rule, active: event)
@@ -151,13 +160,16 @@ public struct AlertEngine: Sendable {
             }
             let sampleUptime: Double
             let observedAt: Date
-            if case .disk(let disk) = reading.value {
-                sampleUptime = disk.capacity?.uptime ?? uptime
-                observedAt = disk.capacity?.sampledAt ?? reading.date
+            if case .storage(let capacity) = reading.value {
+                sampleUptime = capacity.uptime ?? uptime
+                observedAt = capacity.sampledAt ?? reading.date
                 // Reusing a cached capacity is not another confirming observation.
                 if state.lastSample == sampleUptime { continue }
             } else { sampleUptime = uptime; observedAt = reading.date }
-            let allowedGap = metric == .disk ? max(75, Double(interval) * 2.5) : Double(interval) * 2.5
+            let allowedGap: Double
+            if case .storage(let capacity) = reading.value {
+                allowedGap = max(75, Double(capacity.pollingInterval) * 2.5)
+            } else { allowedGap = Double(interval) * 2.5 }
             if let previous = state.lastSample, sampleUptime <= previous || sampleUptime - previous > allowedGap {
                 state.pendingSince = nil; state.recoverySince = nil
             }
@@ -188,7 +200,7 @@ public struct AlertEngine: Sendable {
         case (.cpu, .cpu(let value)): return (0...100).contains(value) ? value : nil
         case (.memory, .memory(let value)): return value.percent
         case (.gpu, .gpu(let value)): return (0...100).contains(value.utilization) ? value.utilization : nil
-        case (.disk, .disk(let value)): return value.total > 0 ? value.available / 1e9 : nil
+        case (.ssd, .storage(let value)): return value.total > 0 ? value.available / 1e9 : nil
         default: return nil
         }
     }

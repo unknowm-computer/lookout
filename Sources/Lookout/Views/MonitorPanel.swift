@@ -10,19 +10,20 @@ struct MonitorPanel: View {
     var onSizeChange: ((CGSize) -> Void)? = nil
     var presented = true
     var initialScreenHeight: CGFloat? = nil
-    var selectedMetric: Metric? = nil
+    var selectedMetrics: [Metric]? = nil
     @State private var visible = false
     @State private var screenHeight = NSScreen.main?.visibleFrame.height ?? 720
     @State private var headerHeight: CGFloat = 36
     @State private var footerHeight: CGFloat = 36
     @State private var contentHeight: CGFloat?
+    @State private var tooltipViewportSize: CGSize?
     @State private var isOpeningActivityMonitor = false
     @State private var activityMonitorError: String?
     private var metrics: [Metric] {
-        settings.configuration.visible.filter { selectedMetric == nil || $0 == selectedMetric }
+        settings.configuration.visible.filter { selectedMetrics?.contains($0) ?? true }
     }
     private var activeAlerts: [AlertEvent] {
-        monitor.activeAlerts.filter { selectedMetric == nil || $0.metric == selectedMetric }
+        monitor.activeAlerts.filter { selectedMetrics?.contains($0.metric) ?? true }
     }
     private var scrollHeight: CGFloat {
         // The 80% limit includes the header and footer, not just the scrolling content.
@@ -34,7 +35,7 @@ struct MonitorPanel: View {
             HStack {
                 Text("LOOKOUT").font(.system(size: 10, weight: .semibold)).tracking(1.6)
                 Spacer()
-                Text("최근 5분").font(.system(size: 10)).foregroundStyle(.secondary)
+                Text(metrics == [.ssd] ? "저장공간" : "최근 5분").font(.system(size: 10)).foregroundStyle(.secondary)
             }.padding(.horizontal, 16).padding(.vertical, 12)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
             Divider()
@@ -57,7 +58,8 @@ struct MonitorPanel: View {
                                 MetricSection(metric: metric, reading: monitor.readings[metric],
                                               history: monitor.histories[metric] ?? HistoryBuffer(),
                                               end: monitor.lastUpdate, visible: visible,
-                                              chartStyle: settings.charts.style(for: metric), processDetails: monitor.processDetails,
+                                              chartStyle: settings.charts.style(for: metric), showsSwapDetails: settings.showsSwapDetails,
+                                              processDetails: monitor.processDetails,
                                               processesInitiallyExpanded: settings.menuBarDisplayMode == .individual)
                                 if metric != metrics.last { Divider().padding(.horizontal, 16) }
                             }
@@ -76,6 +78,9 @@ struct MonitorPanel: View {
                 // Rebuild the viewport when items are removed/reordered so an old offset cannot
                 // survive into a shorter, non-scrollable panel. Metric sampling stays independent.
                 .id(metrics)
+                .coordinateSpace(name: UsageTooltipSpace.viewport)
+                .onGeometryChange(for: CGSize.self) { $0.size } action: { tooltipViewportSize = $0 }
+                .environment(\.usageTooltipViewportSize, tooltipViewportSize)
             }
             Divider()
             HStack {
@@ -130,12 +135,13 @@ private struct MetricSection: View {
     let end: Date
     let visible: Bool
     let chartStyle: ChartStyle
+    let showsSwapDetails: Bool
     let processDetails: ProcessDetailsStore
     let processesInitiallyExpanded: Bool
     private var color: Color {
         switch metric {
         case .cpu: .cyan; case .memory: .purple; case .network: .green
-        case .disk: .blue; case .power: .yellow; case .gpu: .orange
+        case .disk, .ssd: .blue; case .power: .yellow; case .gpu: .orange
         }
     }
     private var summary: String {
@@ -145,25 +151,33 @@ private struct MetricSection: View {
         case .memory(let value): return "\(ValueFormat.memory(value.used)) / \(ValueFormat.memory(value.total))"
         case .network(let value): return "↓ \(ValueFormat.rate(value.download))"
         case .disk: return "시작 디스크"
+        case .storage(let capacity): return "\(ValueFormat.storage(capacity.used)) / \(ValueFormat.storage(capacity.total))"
         case .power(let value): return value.watts.map(ValueFormat.watts) ?? "—"
         case .gpu(let value): return ValueFormat.percent(value.utilization)
         }
     }
+    private var storage: DiskCapacityReading? {
+        if case .storage(let capacity) = reading?.value { return capacity }; return nil
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
-            HStack(spacing: 7) {
-                Image(systemName: metric.symbol).foregroundStyle(color).frame(width: 16)
-                Text(metric.title).fontWeight(.semibold)
-                Spacer()
-                Text(summary).monospacedDigit().fontWeight(.medium)
-            }.font(.system(size: 12))
-            if visible {
-                MetricVisualization(metric: metric, reading: reading, history: history.points,
-                                    end: end, preference: chartStyle, color: color)
+            if metric == .ssd {
+                StorageMetricSummary(capacity: storage, message: reading?.message)
+            } else {
+                HStack(spacing: 7) {
+                    Image(systemName: metric.symbol).foregroundStyle(color).frame(width: 16)
+                    Text(metric.title).fontWeight(.semibold)
+                    Spacer()
+                    Text(summary).monospacedDigit().fontWeight(.medium)
+                }.font(.system(size: 12))
+                if visible {
+                    MetricVisualization(metric: metric, reading: reading, history: history.points,
+                                        end: end, preference: chartStyle, color: color, showsSwapDetails: showsSwapDetails)
+                }
+                details
+                ProcessListDisclosure(metric: metric, reading: reading, visible: visible, details: processDetails,
+                                      initiallyExpanded: processesInitiallyExpanded)
             }
-            details
-            ProcessListDisclosure(metric: metric, reading: reading, visible: visible, details: processDetails,
-                                  initiallyExpanded: processesInitiallyExpanded)
         }.padding(.horizontal, 16).padding(.vertical, 13)
     }
     @ViewBuilder private var details: some View {
@@ -171,18 +185,15 @@ private struct MetricSection: View {
             switch value {
             case .cpu:
                 EmptyView()
-            case .memory(let value):
-                VStack(spacing: 4) {
-                    detailRow("앱", ValueFormat.memory(value.app), "Wired", ValueFormat.memory(value.wired))
-                    detailRow("압축", ValueFormat.memory(value.compressed), "Swap", value.swap.map(ValueFormat.memory) ?? "—")
-                }
+            case .memory:
+                EmptyView()
             case .network(let value):
                 HStack {
                     Text(value.interface).foregroundStyle(.secondary)
                     Spacer()
                     Text("↑ \(ValueFormat.rate(value.upload))").foregroundStyle(.orange)
                 }.font(.system(size: 10)).monospacedDigit()
-            case .disk:
+            case .disk, .storage:
                 EmptyView()
             case .power:
                 EmptyView()
@@ -205,15 +216,5 @@ private struct MetricSection: View {
                 .font(.system(size: 10)).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-    }
-    private func detailRow(_ first: String, _ firstValue: String, _ second: String, _ secondValue: String) -> some View {
-        HStack {
-            Text(first).foregroundStyle(.secondary)
-            Spacer()
-            Text(firstValue).monospacedDigit()
-            Text(second).foregroundStyle(.secondary).padding(.leading, 12)
-            Spacer()
-            Text(secondValue).monospacedDigit()
-        }.font(.system(size: 10))
     }
 }

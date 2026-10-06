@@ -23,13 +23,12 @@ import UserNotifications
                     switch reading.value {
                     case .cpu(let value): print("CPU \(ValueFormat.percent(value))")
                     case .memory(let value):
-                        print("Memory \(ValueFormat.memory(value.used)) / \(ValueFormat.memory(value.total)) · \(ValueFormat.percent(value.percent)) · swap \(value.swap.map(ValueFormat.memory) ?? "—")")
+                        print("Memory \(ValueFormat.memory(value.used)) / \(ValueFormat.memory(value.total)) · \(ValueFormat.percent(value.percent)) · swap \(value.swap.map(ValueFormat.memory) ?? "—") / \(value.swapTotal.map(ValueFormat.memory) ?? "—")")
                     case .network(let value): print("Network \(value.interface) ↓\(ValueFormat.rate(value.download)) ↑\(ValueFormat.rate(value.upload))")
                     case .disk(let value):
                         print("Disk R \(value.activity.map { ValueFormat.rate($0.read) } ?? "—") W \(value.activity.map { ValueFormat.rate($0.write) } ?? "—") · \(value.activityMessage ?? "")")
-                        if let capacity = value.capacity {
-                            print("Storage \(ValueFormat.storage(capacity.used)) / \(ValueFormat.storage(capacity.total)) · available \(ValueFormat.storage(capacity.available))")
-                        } else { print(value.capacityMessage ?? "Storage unavailable") }
+                    case .storage(let capacity):
+                        print("Storage \(ValueFormat.storage(capacity.used)) / \(ValueFormat.storage(capacity.total)) · available \(ValueFormat.storage(capacity.available))")
                     case .power(let value):
                         print("Energy process estimate \(value.watts.map(ValueFormat.watts) ?? "—") · \(value.measuredCount)/\(value.totalCount) processes · sleep preventers \(value.sleepPreventers.map { String($0.count) } ?? "—") · \(value.message ?? "")")
                     case .gpu(let value): print("GPU \(value.name) \(ValueFormat.percent(value.utilization)) · renderer \(value.renderer.map(ValueFormat.percent) ?? "—") · tiler \(value.tiler.map(ValueFormat.percent) ?? "—") · shared \(value.sharedMemory.map(ValueFormat.memory) ?? "—")")
@@ -95,6 +94,7 @@ import UserNotifications
         if CommandLine.arguments.contains("--panel") { NSApp.activate(ignoringOtherApps: true) }
     }
     func applicationWillTerminate(_ notification: Notification) {
+        AppServices.shared.menuBar.stop()
         AppServices.shared.monitor.stop()
     }
 }

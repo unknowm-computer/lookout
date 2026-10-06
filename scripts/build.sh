@@ -26,9 +26,14 @@ xcrun swift build "${task_swift_build_args[@]}"
 
 task_bin_dir=$(xcrun swift build "${task_swift_build_args[@]}" --show-bin-path)
 task_verify_universal "$task_bin_dir/Lookout"
+# Keep crash-symbolication data outside the installed bundle. Preserve exported symbols
+# and Swift runtime metadata while removing local/debug symbols from the shipped binary.
+xcrun dsymutil "$task_bin_dir/Lookout" -o "$PWD/build/Lookout.app.dSYM"
 task_app_dir="$PWD/build/Lookout.app"
 mkdir -p "$task_app_dir/Contents/MacOS" "$task_app_dir/Contents/Resources"
 cp "$task_bin_dir/Lookout" "$task_app_dir/Contents/MacOS/Lookout.new"
+xcrun strip -x -S "$task_app_dir/Contents/MacOS/Lookout.new"
+task_verify_universal "$task_app_dir/Contents/MacOS/Lookout.new"
 mv -f "$task_app_dir/Contents/MacOS/Lookout.new" "$task_app_dir/Contents/MacOS/Lookout"
 cp "$task_info_plist" "$task_app_dir/Contents/Info.plist"
 cp Resources/Sparkle-LICENSE.txt "$task_app_dir/Contents/Resources/Sparkle-LICENSE.txt"

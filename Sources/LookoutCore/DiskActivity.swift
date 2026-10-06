@@ -28,18 +28,26 @@ public struct DiskCounter: Sendable {
     }
 }
 
-/// Capacity and activity can fail independently. No extra timer; disabled/sleeping sampling resets this state.
+/// Shared storage capacity and optional activity can fail independently. No extra timer.
 public struct DiskSamplingState: Sendable {
     private var previous: DiskCounter?
     private var capacity: DiskCapacityReading?
     private var capacityAttempt: Double?
     private var capacityMessage: String?
+    private var capacityInterval: Int?
     public init() {}
     public mutating func reset() { self = DiskSamplingState() }
     public mutating func sample(uptime: Double, date: Date,
                                 readCapacity: () throws -> DiskReading,
-                                readCounters: () throws -> DiskCounter) -> DiskReading {
-        if capacityAttempt.map({ uptime < $0 || uptime - $0 >= 30 }) ?? true {
+                                readCounters: () throws -> DiskCounter,
+                                collectActivity: Bool = true, collectCapacity: Bool = true,
+                                capacityInterval: Int = 30) -> DiskReading {
+        let period = StoragePollingInterval(rawValue: capacityInterval)?.rawValue ?? 30
+        if !collectCapacity || self.capacityInterval != period {
+            capacityAttempt = nil; capacity = nil; capacityMessage = nil
+        }
+        self.capacityInterval = period
+        if collectCapacity && (capacityAttempt.map({ uptime < $0 || uptime - $0 >= Double(period) }) ?? true) {
             capacityAttempt = uptime
             do {
                 let value = try readCapacity()
@@ -47,11 +55,15 @@ public struct DiskSamplingState: Sendable {
                     throw CollectionError.system("저장공간 정보를 읽을 수 없습니다.")
                 }
                 capacity = DiskCapacityReading(name: value.name, total: value.total, available: value.available,
-                                               sampledAt: date, uptime: uptime)
+                                               sampledAt: date, uptime: uptime, pollingInterval: period)
                 capacityMessage = nil
             } catch {
                 capacity = nil; capacityMessage = error.localizedDescription
             }
+        }
+        guard collectActivity else {
+            previous = nil
+            return DiskReading(capacity: capacity, activity: nil, capacityMessage: capacityMessage)
         }
         var activity: DiskActivityReading?, message: String?
         do {

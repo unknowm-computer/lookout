@@ -6,15 +6,20 @@ import LookoutCore
     @Published private(set) var configuration: MonitorConfiguration
     @Published private(set) var alerts: AlertConfiguration
     @Published private(set) var charts: ChartPreferences
+    @Published private(set) var showsSwapDetails: Bool
     @Published private(set) var menuBarDisplayMode: MenuBarDisplayMode
     @Published private(set) var menuBarDensity: MenuBarDensity
     @Published private(set) var menuBarPriority: [Metric]
+    @Published private(set) var menuBarValues: MenuBarValuePreferences
     private let defaults: UserDefaults
     let capabilities: MonitoringCapabilities
     static let key = "monitorSettings.v1"
     init(defaults: UserDefaults = .standard, capabilities: MonitoringCapabilities = .current) {
         self.defaults = defaults
         self.capabilities = capabilities
+        showsSwapDetails = defaults.bool(forKey: "showsSwapDetails.v1")
+        menuBarValues = defaults.data(forKey: "menuBarValues.v1")
+            .flatMap { try? JSONDecoder().decode(MenuBarValuePreferences.self, from: $0) } ?? MenuBarValuePreferences()
         menuBarDisplayMode = defaults.string(forKey: "menuBarDisplayMode.v1")
             .flatMap(MenuBarDisplayMode.init(rawValue:)) ?? .individual
         menuBarDensity = defaults.string(forKey: "menuBarDensity.v1")
@@ -43,6 +48,21 @@ import LookoutCore
         defaults.set(density.rawValue, forKey: "menuBarDensity.v1")
         menuBarDensity = density
     }
+    func setMenuBarValue(_ value: CapacityMenuBarValue, for metric: Metric) {
+        guard metric == .memory || metric == .ssd else { return }
+        var next = menuBarValues
+        if metric == .memory { next.memory = value } else { next.storage = value }
+        guard next != menuBarValues, let data = try? JSONEncoder().encode(next) else { return }
+        defaults.set(data, forKey: "menuBarValues.v1"); menuBarValues = next
+    }
+    func setMenuBarCapacity(_ capacity: CapacityMenuBarValue, for metric: Metric) {
+        setMenuBarValue(CapacityMenuBarValue(capacity: capacity,
+            percentage: menuBarValues.mode(for: metric).isPercentage), for: metric)
+    }
+    func setMenuBarPercentage(_ percentage: Bool, for metric: Metric) {
+        setMenuBarValue(CapacityMenuBarValue(capacity: menuBarValues.mode(for: metric).capacity,
+            percentage: percentage), for: metric)
+    }
     func moveMenuBarPriority(_ metric: Metric, to target: Metric) {
         let next = MetricOrdering.moving(metric, to: target, in: menuBarPriority)
         guard next != menuBarPriority else { return }
@@ -53,6 +73,11 @@ import LookoutCore
         var next = charts; next.set(style, for: metric)
         guard next != charts, let data = try? JSONEncoder().encode(next) else { return }
         defaults.set(data, forKey: "chartSettings.v1"); charts = next
+    }
+    func setShowsSwapDetails(_ value: Bool) {
+        guard value != showsSwapDetails else { return }
+        defaults.set(value, forKey: "showsSwapDetails.v1")
+        showsSwapDetails = value
     }
     func updateAlert(_ metric: Metric, _ change: (inout AlertRule) -> Void) {
         var next = alerts
@@ -81,7 +106,20 @@ import LookoutCore
         update(next)
     }
     func setInterval(_ interval: Int) {
-        var next = configuration; next.interval = [1, 2, 5].contains(interval) ? interval : 2; update(next)
+        var next = configuration; next.interval = [1, 2, 3, 5].contains(interval) ? interval : 2; update(next)
+    }
+    func setStorageInterval(_ interval: Int) {
+        var next = configuration; next.storageInterval = StoragePollingInterval(rawValue: interval)?.rawValue ?? 30; update(next)
+    }
+    func setMenuBarGrouping(cpuGPU: Bool? = nil, memorySSD: Bool? = nil) {
+        var next = configuration
+        if let cpuGPU { next.menuBarGrouping.cpuGPU = cpuGPU }
+        if let memorySSD { next.menuBarGrouping.memorySSD = memorySSD }
+        update(next)
+    }
+    func setMenuBarGrouping(_ grouping: MenuBarGrouping) {
+        guard grouping != configuration.menuBarGrouping else { return }
+        var next = configuration; next.menuBarGrouping = grouping; update(next)
     }
     func setInterface(_ interface: String?) {
         var next = configuration; next.interface = interface; update(next)

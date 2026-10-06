@@ -9,6 +9,27 @@ import LookoutCore
         let width: CGFloat
         var alignment: NSTextAlignment = .right
         var lowerText: String? = nil
+        var pressureRow: Bool? = nil
+        var storageRow: Bool? = nil
+        var pairedIndicators = false
+        var metric: Metric? = nil
+        var lowerMetric: Metric? = nil
+    }
+
+    struct HighlightedValue {
+        let metric: Metric
+        let text: String
+        let frame: NSRect
+        let font: NSFont
+        let alignment: NSTextAlignment
+    }
+
+    struct Presentation {
+        let image: NSImage
+        /// Coordinates use the image's unflipped, bottom-left origin.
+        let pressureFrame: NSRect?
+        let storageFrame: NSRect?
+        let highlightedValues: [HighlightedValue]
     }
 
     private static let font = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular)
@@ -22,22 +43,57 @@ import LookoutCore
 
     static func image(metrics: [Metric], readings: [Metric: MetricReading],
                       showAlertSlot: Bool = false, hasAlert: Bool = false,
-                      compact: Bool = false) -> NSImage {
+                      compact: Bool = false, grouping: MenuBarGrouping = MenuBarGrouping(),
+                      values: MenuBarValuePreferences = MenuBarValuePreferences()) -> NSImage {
+        presentation(metrics: metrics, readings: readings, showAlertSlot: showAlertSlot, hasAlert: hasAlert,
+                     compact: compact, grouping: grouping, values: values).image
+    }
+
+    static func presentation(metrics: [Metric], readings: [Metric: MetricReading],
+                      showAlertSlot: Bool = false, hasAlert: Bool = false,
+                      compact: Bool = false, grouping: MenuBarGrouping = MenuBarGrouping(),
+                      values: MenuBarValuePreferences = MenuBarValuePreferences(),
+                      alerting: Set<Metric> = []) -> Presentation {
         var cells: [Cell] = []
         if showAlertSlot { cells.append(Cell(text: hasAlert ? "!" : "", width: 4, alignment: .left)) }
-        for metric in metrics {
+        let units = grouping.units(metrics: metrics)
+        for unit in units {
             if !cells.isEmpty { cells.append(Cell(text: "", width: compact ? 4 : metricGap)) }
+            if unit.metrics.count == 2 {
+                let upper = unit.metrics[0], lower = unit.metrics[1]
+                cells.append(Cell(text: upper.menuTitle,
+                    width: max(width(upper.menuTitle, font: networkFont), width(lower.menuTitle, font: networkFont)) + 4,
+                    alignment: .left, lowerText: lower.menuTitle))
+                cells.append(Cell(text: text(metric: upper, value: readings[upper]?.value, values: values),
+                    width: max(valueWidth(metric: upper, values: values, font: networkFont),
+                               valueWidth(metric: lower, values: values, font: networkFont)),
+                    lowerText: text(metric: lower, value: readings[lower]?.value, values: values),
+                    metric: upper, lowerMetric: lower))
+                let pressureRow: Bool? = upper == .memory ? true : (lower == .memory ? false : nil)
+                let storageRow: Bool? = values.storage.capacity == .used ? nil :
+                    (upper == .ssd ? false : (lower == .ssd ? true : nil))
+                if pressureRow != nil || storageRow != nil {
+                    cells.append(Cell(text: "", width: 10, pressureRow: pressureRow, storageRow: storageRow,
+                                      pairedIndicators: true))
+                }
+                continue
+            }
+            let metric = unit.metrics[0]
             let value = readings[metric]?.value
             switch metric {
-            case .cpu, .memory, .gpu:
-                let label = compact ? "" : metric.menuTitle
-                let percent = value?.primary
-                let text = percent.map(ValueFormat.percent) ?? "—"
-                if !compact { cells.append(Cell(text: label, width: width(label) + 4, alignment: .left)) }
-                cells.append(Cell(text: text, width: percentWidth))
+            case .cpu, .gpu:
+                cells += percentCells(metric: metric, value: value?.primary, compact: compact)
+            case .memory, .ssd:
+                if !compact { cells.append(Cell(text: metric.menuTitle, width: width(metric.menuTitle) + 4, alignment: .left)) }
+                cells.append(Cell(text: values.text(for: metric, value: value),
+                                  width: valueWidth(metric: metric, values: values, font: font), metric: metric))
+                if metric == .memory { cells.append(Cell(text: "", width: 10, pressureRow: false)) }
+                if metric == .ssd, values.storage.capacity == .available {
+                    cells.append(Cell(text: "", width: 10, storageRow: false))
+                }
             case .power:
                 if !compact { cells.append(Cell(text: "ENG", width: width("ENG") + 4, alignment: .left)) }
-                cells.append(Cell(text: value?.primary.map(ValueFormat.watts) ?? "—", width: width("999.9 W")))
+                cells.append(Cell(text: value?.primary.map(ValueFormat.watts) ?? "—", width: width("999.9 W"), metric: metric))
             case .disk:
                 if case .disk(let disk) = value {
                     cells += rateCells(upload: disk.activity?.read, download: disk.activity?.write, upperLabel: "R", lowerLabel: "W")
@@ -53,8 +109,9 @@ import LookoutCore
             }
         }
 
-        // Two-line rate labels already identify network and disk. Percent/power slots use a symbol.
-        let symbolMetric = compact && metrics.count == 1 && ![Metric.network, .disk].contains(metrics[0]) ? metrics[0] : nil
+        // Paired units and rate labels identify themselves.
+        let labeledMetrics: [Metric] = [.network, .disk]
+        let symbolMetric = compact && metrics.count == 1 && !labeledMetrics.contains(metrics[0]) ? metrics[0] : nil
         let symbolWidth: CGFloat = symbolMetric == nil ? 0 : 20
         let image = NSImage(size: NSSize(width: symbolWidth + cells.reduce(0) { $0 + $1.width }, height: height))
         image.lockFocus()
@@ -66,20 +123,62 @@ import LookoutCore
                                       width: size.width, height: size.height))
         }
         var x = symbolWidth
+        var pressureFrame: NSRect?
+        var storageFrame: NSRect?
+        var highlightedValues: [HighlightedValue] = []
         for cell in cells {
+            if let upperRow = cell.pressureRow {
+                let y: CGFloat = cell.pairedIndicators ? (upperRow ? 14 : 3) : 8
+                pressureFrame = NSRect(x: x + 3, y: y, width: 6, height: 6)
+            }
+            if let lowerRow = cell.storageRow {
+                let y: CGFloat = cell.pairedIndicators ? (lowerRow ? 3 : 14) : 8
+                storageFrame = NSRect(x: x + 3, y: y, width: 6, height: 6)
+            }
+            func drawRow(_ text: String, metric: Metric?, font: NSFont, bottom: CGFloat, rowHeight: CGFloat) {
+                if let metric, alerting.contains(metric), !text.isEmpty {
+                    highlightedValues.append(HighlightedValue(metric: metric, text: text,
+                        frame: NSRect(x: x, y: bottom, width: cell.width, height: rowHeight),
+                        font: font, alignment: cell.alignment))
+                } else {
+                    draw(text, cell: cell, font: font, x: x, bottom: bottom, rowHeight: rowHeight)
+                }
+            }
             if let lowerText = cell.lowerText {
-                draw(cell.text, cell: cell, font: networkFont, x: x, bottom: height / 2, rowHeight: height / 2)
-                draw(lowerText, cell: cell, font: networkFont, x: x, bottom: 0, rowHeight: height / 2)
+                drawRow(cell.text, metric: cell.metric, font: networkFont, bottom: height / 2, rowHeight: height / 2)
+                drawRow(lowerText, metric: cell.lowerMetric, font: networkFont, bottom: 0, rowHeight: height / 2)
             } else {
-                draw(cell.text, cell: cell, font: font, x: x, bottom: 0, rowHeight: height)
+                drawRow(cell.text, metric: cell.metric, font: font, bottom: 0, rowHeight: height)
             }
             x += cell.width
         }
         image.unlockFocus()
         image.isTemplate = true
-        return image
+        return Presentation(image: image, pressureFrame: pressureFrame, storageFrame: storageFrame,
+                            highlightedValues: highlightedValues)
     }
 
+    private static func text(metric: Metric, value: ReadingValue?, values: MenuBarValuePreferences) -> String {
+        if metric == .memory || metric == .ssd { return values.text(for: metric, value: value) }
+        if metric == .power { return value?.primary.map(ValueFormat.watts) ?? "—" }
+        return value?.primary.map(ValueFormat.percent) ?? "—"
+    }
+    private static func valueWidth(metric: Metric, values: MenuBarValuePreferences, font: NSFont) -> CGFloat {
+        if metric == .power { return width("999.9 W", font: font) }
+        guard metric == .memory || metric == .ssd, !values.mode(for: metric).isPercentage else {
+            return width("100%", font: font)
+        }
+        // Reserve the largest unit and digit count independently of the current reading.
+        let templates = metric == .memory ? ["9999.9 GiB", "9999.9 MiB"]
+            : ["9999 GB", "9999 TB", "99.9 GB", "99.9 TB", "999 MB", "99.9 MB", "99.9 KB"]
+        return templates.map { width($0, font: font) }.max()!
+    }
+
+    private static func percentCells(metric: Metric, value: Double?, compact: Bool) -> [Cell] {
+        let label = metric.menuTitle
+        let labelCells = compact ? [] : [Cell(text: label, width: width(label) + 4, alignment: .left)]
+        return labelCells + [Cell(text: value.map(ValueFormat.percent) ?? "—", width: percentWidth, metric: metric)]
+    }
     private static func rateCells(upload: Double?, download: Double?, upperLabel: String = "↑", lowerLabel: String = "↓") -> [Cell] {
         let upper = upload.map(ValueFormat.rate) ?? "—"
         let lower = download.map(ValueFormat.rate) ?? "—"
@@ -88,7 +187,12 @@ import LookoutCore
                 Cell(text: upper, width: numberWidth + 2 + unitWidth, lowerText: lower)]
     }
 
-    private static func draw(_ text: String, cell: Cell, font: NSFont, x: CGFloat, bottom: CGFloat, rowHeight: CGFloat) {
+    static func draw(_ value: HighlightedValue, color: NSColor) {
+        draw(value.text, cell: Cell(text: value.text, width: value.frame.width, alignment: value.alignment),
+             font: value.font, x: value.frame.minX, bottom: value.frame.minY, rowHeight: value.frame.height, color: color)
+    }
+    private static func draw(_ text: String, cell: Cell, font: NSFont, x: CGFloat, bottom: CGFloat, rowHeight: CGFloat,
+                             color: NSColor = .black) {
         guard !text.isEmpty else { return }
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = cell.alignment
@@ -102,7 +206,7 @@ import LookoutCore
         context.translateBy(x: x, y: y)
         context.scaleBy(x: scale, y: 1)
         (text as NSString).draw(in: NSRect(x: 0, y: 0, width: cell.width / scale, height: textHeight),
-                               withAttributes: [.font: font, .foregroundColor: NSColor.black, .paragraphStyle: paragraph])
+                               withAttributes: [.font: font, .foregroundColor: color, .paragraphStyle: paragraph])
         context.restoreGState()
     }
 

@@ -75,14 +75,17 @@ import LookoutCore
                 guard !Task.isCancelled, let self, self.generation == token else { return }
                 for reading in results {
                     self.readings[reading.metric] = reading
-                    self.histories[reading.metric, default: HistoryBuffer()].append(reading, interval: config.interval)
+                    if reading.metric != .ssd {
+                        self.histories[reading.metric, default: HistoryBuffer()].append(reading, interval: config.interval)
+                    }
                 }
                 self.alertEngine.evaluate(results, configuration: self.settings.alerts, monitored: config.enabled,
                                           uptime: ProcessInfo.processInfo.systemUptime, interval: config.interval)
                 self.publishAlerts()
                 self.lastUpdate = Date()
                 if config.enabled.isEmpty { return }
-                do { try await Task.sleep(for: .seconds(config.interval)) } catch { return }
+                let interval = config.enabled == [.ssd] ? config.storageInterval : config.interval
+                do { try await Task.sleep(for: .seconds(interval)) } catch { return }
             }
         }
     }
