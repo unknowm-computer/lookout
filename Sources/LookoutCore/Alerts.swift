@@ -20,11 +20,11 @@ public struct AlertRule: Codable, Equatable, Sendable, Identifiable {
     }
     public var unit: String { metric == .ssd ? "GB" : "%" }
     public var condition: String {
-        switch metric { case .ssd: "미만"; default: "이상" }
+        switch metric { case .ssd: L10n.text("미만"); default: L10n.text("이상") }
     }
     public var recoveryDescription: String {
-        let direction = metric == .ssd ? "이상" : "이하"
-        return "\(Int(recoveryThreshold)) \(unit) \(direction) 10초 유지 시 해제"
+        let direction = metric == .ssd ? L10n.text("이상") : L10n.text("이하")
+        return L10n.text("\(Int(recoveryThreshold)) \(unit) \(direction) 10초 유지 시 해제")
     }
     public func isTriggered(_ value: Double) -> Bool {
         switch metric { case .ssd: value < threshold; default: value >= threshold }
@@ -84,13 +84,13 @@ public struct AlertEvent: Codable, Equatable, Sendable, Identifiable {
     public var metric: Metric { rule.metric! }
     public var title: String {
         switch metric {
-        case .ssd: "SSD 여유 공간 부족"
-        default: "\(metric.title) 사용률 높음"
+        case .ssd: L10n.text("SSD 여유 공간 부족")
+        default: L10n.text("\(metric.title) 사용률 높음")
         }
     }
     public var message: String {
         let value = metric == .ssd ? String(format: "%.1f GB", value) : ValueFormat.percent(value)
-        return "\(metric == .ssd ? "여유" : "사용률") \(value) · 기준 \(Int(rule.threshold)) \(rule.unit) \(rule.condition)"
+        return L10n.text("\(metric == .ssd ? L10n.text("여유") : L10n.text("사용률")) \(value) · 기준 \(Int(rule.threshold)) \(rule.unit) \(rule.condition)")
     }
 }
 

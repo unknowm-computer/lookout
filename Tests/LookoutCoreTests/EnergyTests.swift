@@ -50,6 +50,18 @@ private func energyCounter(_ pid: Int32 = 1, started: UInt64 = 1, energy: UInt64
     #expect(!EnergyCollector.isSleepPreventingAssertion(type: nil, level: 255))
     #expect(!EnergyCollector.isSleepPreventingAssertion(type: "PreventSystemSleep", level: nil))
 }
+@Test func sleepPreventionKeepsTheFullListAndSafeIconIdentityWithoutEnergyCounters() {
+    let preventers = (1...7).map { SleepPreventer(pid: Int32($0), name: "Process \($0)", started: UInt64($0 * 10)) }
+    var state = EnergySamplingState()
+    let reading = state.sample(counters: [], totalCount: 7, sleepPreventers: preventers, supported: false)
+    #expect(reading.sleepPreventers?.map(\.pid) == Array(1...7).map(Int32.init))
+    #expect(reading.sleepPreventers?.map(\.processID) == preventers.map(\.processID))
+    let reused = SleepPreventer(pid: 1, name: "New process", started: 999)
+    #expect(reused.processID != preventers[0].processID)
+    #expect(SleepPreventer(pid: 1, name: "Unreadable process").processID.started == 0)
+    #expect(state.sample(counters: [], totalCount: 7, sleepPreventers: nil).sleepPreventers == nil)
+    #expect(state.sample(counters: [], totalCount: 7, sleepPreventers: []).sleepPreventers?.isEmpty == true)
+}
 @Test func energyHistoryUsesWattsWithAutomaticScaleAndMissingSamples() {
     var history = HistoryBuffer()
     let date = Date()

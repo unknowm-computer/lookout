@@ -2,7 +2,7 @@ import Foundation
 import LookoutCore
 import Testing
 
-@Test func cpuMemorySSDPlacementKeepsGroupsAtTheirEarliestMemberAndHighestPriority() {
+@Test func cpuMemorySSDPlacementKeepsGroupsAtTheirUpperMemberAndHighestPriority() {
     let order: [Metric] = [.cpu, .memory, .ssd, .gpu, .network, .disk, .power]
     let priority: [Metric] = [.cpu, .memory, .ssd, .network, .disk, .power, .gpu]
     let grouped = MonitorConfiguration(order: order, menuBarGrouping: MenuBarGrouping(cpuGPU: true, memorySSD: true))
@@ -17,7 +17,7 @@ import Testing
 @Test func pairedMenuBarUnitsRespectPlacementAndSurviveOneDisabledMember() {
     let groups = MenuBarGrouping(cpuGPU: true, memorySSD: true)
     #expect(groups.units(metrics: [.network, .gpu, .memory, .cpu, .ssd, .disk]) ==
-            [.metric(.network), .cpuGPU, .memorySSD, .metric(.disk)])
+            [.metric(.network), .memorySSD, .cpuGPU, .metric(.disk)])
     #expect(groups.units(metrics: [.gpu, .ssd]) == [.metric(.gpu), .metric(.ssd)])
     #expect(MenuBarGrouping(cpuGPU: false, memorySSD: false).units(metrics: [.cpu, .gpu, .memory, .ssd]).count == 4)
     #expect(groups.units(metrics: []) == [])

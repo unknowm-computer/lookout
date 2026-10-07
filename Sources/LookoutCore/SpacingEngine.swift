@@ -48,10 +48,10 @@ public enum SpacingError: Error, LocalizedError {
     case conflict, storage, invalidRange, rollback
     public var errorDescription: String? {
         switch self {
-        case .conflict: "다른 앱에서 간격 설정을 변경했습니다. 현재 값을 확인한 후 복원 여부를 선택하세요."
-        case .storage: "간격 설정을 저장하거나 읽어 확인할 수 없습니다."
-        case .invalidRange: "간격과 클릭 여백은 4~24 범위에서 선택하세요."
-        case .rollback: "부분 변경의 원상 복원을 확인하지 못했습니다. 보관된 원래 설정으로 복원을 다시 시도하세요."
+        case .conflict: L10n.text("다른 앱에서 간격 설정을 변경했습니다. 현재 값을 확인한 후 복원 여부를 선택하세요.")
+        case .storage: L10n.text("간격 설정을 저장하거나 읽어 확인할 수 없습니다.")
+        case .invalidRange: L10n.text("간격과 클릭 여백은 4~24 범위에서 선택하세요.")
+        case .rollback: L10n.text("부분 변경의 원상 복원을 확인하지 못했습니다. 보관된 원래 설정으로 복원을 다시 시도하세요.")
         }
     }
 }

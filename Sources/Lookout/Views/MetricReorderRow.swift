@@ -53,13 +53,13 @@ struct MetricReorderRow<Content: View>: View {
                     dragCancelled()
                     return .handled
                 }
-                .help("드래그하여 순서 변경 · Esc로 취소")
-                .accessibilityLabel("\(metric.title) 순서 변경")
-                .accessibilityAction(named: Text("위로 이동")) { moveBy(-1) }
-                .accessibilityAction(named: Text("아래로 이동")) { moveBy(1) }
+                .help(L10n.text("드래그하여 순서 변경 · Esc로 취소"))
+                .accessibilityLabel(L10n.text("\(metric.title) 순서 변경"))
+                .accessibilityAction(named: Text(L10n.text("위로 이동"))) { moveBy(-1) }
+                .accessibilityAction(named: Text(L10n.text("아래로 이동"))) { moveBy(1) }
                 .contextMenu {
-                    Button("위로 이동") { moveBy(-1) }.disabled(metric == order.first)
-                    Button("아래로 이동") { moveBy(1) }.disabled(metric == order.last)
+                    Button(L10n.text("위로 이동")) { moveBy(-1) }.disabled(metric == order.first)
+                    Button(L10n.text("아래로 이동")) { moveBy(1) }.disabled(metric == order.last)
                 }
         }
         .padding(7)

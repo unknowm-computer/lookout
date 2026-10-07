@@ -22,11 +22,11 @@ import UserNotifications
     }
     var permissionDescription: String {
         switch authorization {
-        case .notDetermined: "알림을 켤 때 macOS 권한을 요청합니다."
-        case .denied: "알림 권한이 꺼져 있습니다. 시스템 설정 → 알림 → Lookout에서 허용하세요."
+        case .notDetermined: L10n.text("알림을 켤 때 macOS 권한을 요청합니다.")
+        case .denied: L10n.text("알림 권한이 꺼져 있습니다. 시스템 설정 → 알림 → Lookout에서 허용하세요.")
         case .authorized, .provisional:
-            bannersEnabled ? "macOS 알림 사용 가능" : "배너가 꺼져 있습니다. 시스템 설정 → 알림 → Lookout에서 변경하세요."
-        default: "macOS 알림 설정을 확인하세요."
+            bannersEnabled ? L10n.text("macOS 알림 사용 가능") : L10n.text("배너가 꺼져 있습니다. 시스템 설정 → 알림 → Lookout에서 변경하세요.")
+        default: L10n.text("macOS 알림 설정을 확인하세요.")
         }
     }
     init(defaults: UserDefaults = .standard) {
@@ -44,7 +44,7 @@ import UserNotifications
         busy = true; defer { busy = false }
         do {
             _ = try await center.requestAuthorization(options: [.alert, .sound]); feedback = nil
-        } catch { feedback = "알림 권한 요청 실패: \(error.localizedDescription)" }
+        } catch { feedback = L10n.text("알림 권한 요청 실패: \(error.localizedDescription)") }
         await refreshAuthorization()
     }
     func test(sound: Bool) async {
@@ -52,13 +52,13 @@ import UserNotifications
         await refreshAuthorization()
         guard canNotify else { feedback = permissionDescription; return }
         let content = UNMutableNotificationContent()
-        content.title = "Lookout 테스트 알림"
-        content.body = "알림 연결을 확인합니다. 실제 경고가 아닙니다. 클릭하면 상세 패널이 열립니다."
+        content.title = L10n.text("Lookout 테스트 알림")
+        content.body = L10n.text("알림 연결을 확인합니다. 실제 경고가 아닙니다. 클릭하면 상세 패널이 열립니다.")
         if sound { content.sound = .default }
         do {
             try await center.add(UNNotificationRequest(identifier: "lookout.test.\(UUID().uuidString)", content: content, trigger: nil))
-            feedback = "테스트 알림을 요청했습니다. 표시는 macOS 알림·집중 모드 설정을 따릅니다."
-        } catch { feedback = "테스트 알림 요청 실패: \(error.localizedDescription)" }
+            feedback = L10n.text("테스트 알림을 요청했습니다. 표시는 macOS 알림·집중 모드 설정을 따릅니다.")
+        } catch { feedback = L10n.text("테스트 알림 요청 실패: \(error.localizedDescription)") }
     }
     func synchronize(active events: [AlertEvent], sound: Bool, eligible: Set<UUID>) {
         let next = Dictionary(events.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
@@ -104,7 +104,7 @@ import UserNotifications
             delivered.insert(event.id); persistDelivered(); retryAfter.removeValue(forKey: event.id)
         } catch {
             retryAfter[event.id] = ProcessInfo.processInfo.systemUptime + 30
-            feedback = "경고 알림 요청 실패: \(error.localizedDescription)"
+            feedback = L10n.text("경고 알림 요청 실패: \(error.localizedDescription)")
         }
     }
     private func updateAuthorization(_ settings: UNNotificationSettings) {

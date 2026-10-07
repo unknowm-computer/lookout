@@ -30,8 +30,13 @@ public struct EnergyProcessReading: Identifiable, Sendable {
 public struct SleepPreventer: Identifiable, Sendable {
     public let pid: Int32
     public let name: String
+    public let started: UInt64?
     public var id: Int32 { pid }
-    public init(pid: Int32, name: String) { self.pid = pid; self.name = name }
+    /// Unknown start time uses the fallback icon; never reuse an icon based on PID alone.
+    public var processID: EnergyProcessID { EnergyProcessID(pid: pid, started: started ?? 0) }
+    public init(pid: Int32, name: String, started: UInt64? = nil) {
+        self.pid = pid; self.name = name; self.started = started
+    }
 }
 public struct PowerReading: Sendable {
     public let watts: Double?
@@ -67,8 +72,8 @@ public struct EnergySamplingState: Sendable {
         return PowerReading(watts: rates.isEmpty ? nil : rates.reduce(0) { $0 + $1.watts },
                             processes: Array(sorted.filter { $0.watts > 0 }.prefix(5)), measuredCount: rates.count,
                             readableCount: unique.count, totalCount: totalCount, sleepPreventers: sleepPreventers,
-                            message: !supported ? "이 Mac에서 프로세스 에너지 통계를 제공하지 않습니다." :
-                                rates.isEmpty ? "다음 에너지 측정을 기다리는 중" : nil)
+                            message: !supported ? L10n.text("이 Mac에서 프로세스 에너지 통계를 제공하지 않습니다.") :
+                                rates.isEmpty ? L10n.text("다음 에너지 측정을 기다리는 중") : nil)
     }
 }
 
@@ -80,10 +85,10 @@ struct EnergyCollector {
     mutating func reset() { names.removeAll(); state.reset() }
     mutating func collect() throws -> PowerReading {
         let count = proc_listallpids(nil, 0)
-        guard count > 0 else { state.reset(); throw CollectionError.system("프로세스 목록을 읽을 수 없습니다.") }
+        guard count > 0 else { state.reset(); throw CollectionError.system(L10n.text("프로세스 목록을 읽을 수 없습니다.")) }
         var pids = [Int32](repeating: 0, count: Int(count) + 128)
         let actual = pids.withUnsafeMutableBytes { proc_listallpids($0.baseAddress, Int32($0.count)) }
-        guard actual > 0, actual <= pids.count else { state.reset(); throw CollectionError.system("프로세스 목록을 읽을 수 없습니다.") }
+        guard actual > 0, actual <= pids.count else { state.reset(); throw CollectionError.system(L10n.text("프로세스 목록을 읽을 수 없습니다.")) }
         var counters: [EnergyProcessCounter] = []
         for pid in pids.prefix(Int(actual)) where pid > 0 {
             var info = rusage_info_v6()
@@ -106,7 +111,9 @@ struct EnergyCollector {
         let supported = false
         #endif
         return state.sample(counters: counters, totalCount: pids.prefix(Int(actual)).filter { $0 > 0 }.count,
-                            sleepPreventers: Self.sleepPreventers(), supported: supported)
+                            sleepPreventers: Self.sleepPreventers(processIDs: Dictionary(
+                                counters.map { ($0.id.pid, $0.id) }, uniquingKeysWith: { _, latest in latest })),
+                            supported: supported)
     }
     static func processName(_ pid: Int32) -> String {
         var bytes = [CChar](repeating: 0, count: 256)
@@ -126,14 +133,15 @@ struct EnergyCollector {
         return [kIOPMAssertionTypePreventUserIdleSystemSleep as String,
                 kIOPMAssertionTypePreventSystemSleep as String, "NoIdleSleepAssertion"].contains(type)
     }
-    private static func sleepPreventers() -> [SleepPreventer]? {
+    private static func sleepPreventers(processIDs: [Int32: EnergyProcessID]) -> [SleepPreventer]? {
         var values: Unmanaged<CFDictionary>?
         guard IOPMCopyAssertionsByProcess(&values) == kIOReturnSuccess,
               let assertions = values?.takeRetainedValue() as? [NSNumber: [[String: Any]]] else { return nil }
         return assertions.compactMap { pid, entries in
             guard entries.contains(where: { isSleepPreventingAssertion(type: $0[kIOPMAssertionTypeKey] as? String,
                 level: ($0[kIOPMAssertionLevelKey] as? NSNumber)?.intValue) }) else { return nil }
-            return SleepPreventer(pid: pid.int32Value, name: processName(pid.int32Value))
+            return SleepPreventer(pid: pid.int32Value, name: processName(pid.int32Value),
+                                  started: processIDs[pid.int32Value]?.started)
         }.sorted { $0.pid < $1.pid }
     }
 }

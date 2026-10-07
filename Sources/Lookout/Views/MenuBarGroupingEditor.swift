@@ -20,14 +20,14 @@ struct MenuBarGroupingEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("항목 그룹화").font(.system(size: 13, weight: .semibold))
-            Text("항목을 다른 항목 위로 드래그하여 두 줄로 묶습니다.")
+            Text(L10n.text("항목 그룹화")).font(.system(size: 13, weight: .semibold))
+            Text(L10n.text("항목을 다른 항목 위로 드래그하여 두 줄로 묶습니다."))
                 .font(.system(size: 11)).foregroundStyle(.secondary)
             board
-            Text("그룹 안에서 드래그하면 순서 교환 · 밖으로 꺼내면 해제 · Esc로 취소")
+            Text(L10n.text("그룹 안에서 드래그하면 순서 교환 · 밖으로 꺼내면 해제 · Esc로 취소"))
                 .font(.system(size: 10)).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("네트워크·디스크 I/O는 별도로 표시합니다. 모니터링을 끈 항목의 그룹 설정은 유지됩니다.")
+            Text(L10n.text("네트워크·디스크 I/O는 별도로 표시합니다. 모니터링을 끈 항목의 그룹 설정은 유지됩니다."))
                 .font(.system(size: 10)).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -117,7 +117,7 @@ struct MenuBarGroupingEditor: View {
                 .background(Color(nsColor: .controlBackgroundColor), in: Circle())
                 .clipShape(Circle())
                 .overlay { Circle().strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.5) }
-                .accessibilityLabel("\(unit.title) 그룹 해제").help("그룹 해제")
+                .accessibilityLabel(L10n.text("\(unit.title) 그룹 해제")).help(L10n.text("그룹 해제"))
                 .offset(x: 6, y: -6)
             }
         }
@@ -137,23 +137,23 @@ struct MenuBarGroupingEditor: View {
         .frame(maxWidth: .infinity).frame(height: 24)
     }
     private var dragHint: String {
-        if session?.detaching == true { return "놓으면 그룹이 해제됩니다" }
+        if session?.detaching == true { return L10n.text("놓으면 그룹이 해제됩니다") }
         if let session, let target = session.target {
-            if grouping.pair(containing: session.source)?.metrics.contains(target) == true { return "놓으면 두 줄 순서가 바뀝니다" }
-            return "놓으면 \(session.source.title) / \(target.title)로 묶입니다"
+            if grouping.pair(containing: session.source)?.metrics.contains(target) == true { return L10n.text("놓으면 두 줄 순서가 바뀝니다") }
+            return L10n.text("놓으면 \(session.source.title) / \(target.title)로 묶입니다")
         }
-        return "그룹에서 항목을 꺼내 여기에 놓으면 해제됩니다"
+        return L10n.text("그룹에서 항목을 꺼내 여기에 놓으면 해제됩니다")
     }
 
     @ViewBuilder private func actions(for metric: Metric) -> some View {
         if grouping.pair(containing: metric) != nil {
-            Button("두 줄 순서 교환") { change(grouping.swapping(metric)) }
-            Button("그룹 해제") { change(grouping.removing(metric)) }
+            Button(L10n.text("두 줄 순서 교환")) { change(grouping.swapping(metric)) }
+            Button(L10n.text("그룹 해제")) { change(grouping.removing(metric)) }
         }
         ForEach(MenuBarGrouping.eligible.filter {
             $0 != metric && supported.contains($0) && grouping.pair(containing: metric)?.metrics.contains($0) != true
         }) { target in
-            Button("\(target.title)와 묶기") { change(grouping.pairing(metric, with: target)) }
+            Button(L10n.text("\(target.title)와 묶기")) { change(grouping.pairing(metric, with: target)) }
         }
     }
 
@@ -257,10 +257,10 @@ private struct PairingToken<Label: View, MenuContent: View>: View {
             }
             .contextMenu { if supported { menu() } }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(metric.title) 그룹화")
-            .accessibilityHint(supported ? "다른 항목으로 드래그하거나 동작 메뉴에서 그룹을 선택합니다." : "이 Mac에서는 지원하지 않습니다.")
+            .accessibilityLabel(L10n.text("\(metric.title) 그룹화"))
+            .accessibilityHint(supported ? L10n.text("다른 항목으로 드래그하거나 동작 메뉴에서 그룹을 선택합니다.") : L10n.text("이 Mac에서는 지원하지 않습니다."))
             .accessibilityActions { if supported { menu() } }
-            .help(supported ? "드래그하여 그룹화 · 보조 클릭으로 동작 메뉴 · Esc로 취소" : "이 Mac에서는 지원하지 않습니다.")
+            .help(supported ? L10n.text("드래그하여 그룹화 · 보조 클릭으로 동작 메뉴 · Esc로 취소") : L10n.text("이 Mac에서는 지원하지 않습니다."))
     }
 }
 

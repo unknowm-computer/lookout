@@ -20,7 +20,7 @@ struct MonitorPanel: View {
     @State private var isOpeningActivityMonitor = false
     @State private var activityMonitorError: String?
     private var metrics: [Metric] {
-        settings.configuration.visible.filter { selectedMetrics?.contains($0) ?? true }
+        settings.configuration.detailMetrics.filter { selectedMetrics?.contains($0) ?? true }
     }
     private var activeAlerts: [AlertEvent] {
         monitor.activeAlerts.filter { selectedMetrics?.contains($0.metric) ?? true }
@@ -35,15 +35,15 @@ struct MonitorPanel: View {
             HStack {
                 Text("LOOKOUT").font(.system(size: 10, weight: .semibold)).tracking(1.6)
                 Spacer()
-                Text(metrics == [.ssd] ? "저장공간" : "최근 5분").font(.system(size: 10)).foregroundStyle(.secondary)
+                Text(metrics == [.ssd] ? L10n.text("저장공간") : L10n.text("최근 5분")).font(.system(size: 10)).foregroundStyle(.secondary)
             }.padding(.horizontal, 16).padding(.vertical, 12)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
             Divider()
             if metrics.isEmpty {
                 VStack(spacing: 10) {
                     Image(systemName: "chart.bar.xaxis").font(.system(size: 28)).foregroundStyle(.secondary)
-                    Text("모니터링 항목을 선택하세요").font(.system(size: 12))
-                    Text("설정에서 필요한 항목만 켤 수 있습니다.").font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text(L10n.text("모니터링 항목을 선택하세요")).font(.system(size: 12))
+                    Text(L10n.text("설정에서 필요한 항목만 켤 수 있습니다.")).font(.system(size: 11)).foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity).padding(.vertical, 34)
             } else {
                 ScrollViewReader { proxy in
@@ -60,7 +60,7 @@ struct MonitorPanel: View {
                                               end: monitor.lastUpdate, visible: visible,
                                               chartStyle: settings.charts.style(for: metric), showsSwapDetails: settings.showsSwapDetails,
                                               processDetails: monitor.processDetails,
-                                              processesInitiallyExpanded: settings.menuBarDisplayMode == .individual)
+                                              detailsInitiallyExpanded: settings.menuBarDisplayMode == .individual)
                                 if metric != metrics.last { Divider().padding(.horizontal, 16) }
                             }
                         }
@@ -87,7 +87,7 @@ struct MonitorPanel: View {
                 Button {
                     onOpenSettings?()
                     NSApp.activate(ignoringOtherApps: true)
-                } label: { Label("설정…", systemImage: "gearshape") }
+                } label: { Label(L10n.text("설정…"), systemImage: "gearshape") }
                 .keyboardShortcut(",", modifiers: .command)
                 Button {
                     isOpeningActivityMonitor = true
@@ -96,11 +96,11 @@ struct MonitorPanel: View {
                         do { try await ActivityMonitorLauncher.open() }
                         catch { activityMonitorError = error.localizedDescription }
                     }
-                } label: { Label("활성 상태 보기", systemImage: "waveform.path.ecg") }
+                } label: { Label(L10n.text("활성 상태 보기"), systemImage: "waveform.path.ecg") }
                 .disabled(isOpeningActivityMonitor)
-                .help("macOS 활성 상태 보기 열기")
+                .help(L10n.text("macOS 활성 상태 보기 열기"))
                 Spacer()
-                Button("종료") { monitor.stop(); NSApp.terminate(nil) }
+                Button(L10n.text("종료")) { monitor.stop(); NSApp.terminate(nil) }
                     .keyboardShortcut("q", modifiers: .command)
             }
             .buttonStyle(PanelActionButtonStyle(borderless: true)).font(.system(size: 11))
@@ -111,11 +111,11 @@ struct MonitorPanel: View {
         // Report the intrinsic content height to either the preview window or the native popover.
         .fixedSize(horizontal: false, vertical: true)
         .background(.regularMaterial)
-        .alert("활성 상태 보기를 열 수 없습니다.", isPresented: Binding(
+        .alert(L10n.text("활성 상태 보기를 열 수 없습니다."), isPresented: Binding(
             get: { activityMonitorError != nil },
             set: { if !$0 { activityMonitorError = nil } }
         )) {
-            Button("확인", role: .cancel) { activityMonitorError = nil }
+            Button(L10n.text("확인"), role: .cancel) { activityMonitorError = nil }
         } message: { Text(activityMonitorError ?? "") }
         .background(PanelScreenReader { screenHeight = $0 })
         .onGeometryChange(for: CGSize.self) { $0.size } action: { onSizeChange?($0) }
@@ -137,7 +137,7 @@ private struct MetricSection: View {
     let chartStyle: ChartStyle
     let showsSwapDetails: Bool
     let processDetails: ProcessDetailsStore
-    let processesInitiallyExpanded: Bool
+    let detailsInitiallyExpanded: Bool
     private var color: Color {
         switch metric {
         case .cpu: .cyan; case .memory: .purple; case .network: .green
@@ -176,11 +176,12 @@ private struct MetricSection: View {
                 }.font(.system(size: 12))
                 if visible {
                     MetricVisualization(metric: metric, reading: reading, history: history.points,
-                                        end: end, preference: chartStyle, color: color, showsSwapDetails: showsSwapDetails)
+                                        end: end, preference: chartStyle, color: color, showsSwapDetails: showsSwapDetails,
+                                        initiallyExpanded: detailsInitiallyExpanded)
                 }
                 details
                 ProcessListDisclosure(metric: metric, reading: reading, visible: visible, details: processDetails,
-                                      initiallyExpanded: processesInitiallyExpanded)
+                                      initiallyExpanded: detailsInitiallyExpanded)
             }
         }.padding(.horizontal, 16).padding(.vertical, 13)
     }
@@ -192,9 +193,11 @@ private struct MetricSection: View {
             case .memory:
                 EmptyView()
             case .network(let value):
-                HStack(spacing: 14) {
-                    networkRate("다운로드", value.download, .green)
-                    networkRate("업로드", value.upload, .orange)
+                if chartStyle.resolved(for: metric) != .gauge {
+                    HStack(spacing: 14) {
+                        networkRate(L10n.text("다운로드"), value.download, .green)
+                        networkRate(L10n.text("업로드"), value.upload, .orange)
+                    }
                 }
             case .disk, .storage:
                 EmptyView()
@@ -205,17 +208,17 @@ private struct MetricSection: View {
                     HStack {
                         Text(value.name).lineLimit(1)
                         Spacer()
-                        if let memory = value.sharedMemory { Text("공유 \(ValueFormat.memory(memory))").monospacedDigit() }
+                        if let memory = value.sharedMemory { Text(L10n.text("공유 \(ValueFormat.memory(memory))")).monospacedDigit() }
                     }
                     HStack {
-                        Text("렌더링 \(value.renderer.map(ValueFormat.percent) ?? "—")")
+                        Text(L10n.text("렌더링 \(value.renderer.map(ValueFormat.percent) ?? "—")"))
                         Spacer()
-                        Text("타일링 \(value.tiler.map(ValueFormat.percent) ?? "—")")
+                        Text(L10n.text("타일링 \(value.tiler.map(ValueFormat.percent) ?? "—")"))
                     }.monospacedDigit()
                 }.font(.system(size: 10)).foregroundStyle(.secondary)
             }
         } else {
-            Text(reading?.message ?? "측정을 시작하는 중")
+            Text(reading?.message ?? L10n.text("측정을 시작하는 중"))
                 .font(.system(size: 10)).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -228,7 +231,7 @@ private struct MetricSection: View {
             Text(ValueFormat.rate(value)).monospacedDigit().fontWeight(.medium)
         }.font(.system(size: 11)).frame(maxWidth: .infinity)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("네트워크 \(label) 속도")
+            .accessibilityLabel(L10n.text("네트워크 \(label) 속도"))
             .accessibilityValue(ValueFormat.rate(value))
     }
 }

@@ -7,24 +7,22 @@ struct DiskVisualization: View {
     let end: Date
     let style: ChartStyle
     let color: Color
+    var initiallyExpanded = false
     private var disk: DiskReading? { if case .disk(let value) = reading?.value { return value }; return nil }
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if style == .bar {
-                Text("5초 평균").font(.system(size: 9)).foregroundStyle(.secondary)
-                HistoryBarChart(metric: .disk, history: history, end: end, color: color).frame(height: 66)
-            } else {
-                MetricChart(metric: .disk, history: history, end: end, color: color).frame(height: 66)
-            }
-            HStack(spacing: 14) {
-                rate("읽기", disk?.activity?.read, color)
-                rate("쓰기", disk?.activity?.write, .orange)
-            }
             if style == .gauge {
-                let upper = ChartData.rateUpperBound(history: history, current: reading?.value)
+                RateGaugeHistory(metric: .disk, reading: reading, history: history, end: end, color: color,
+                                 initiallyExpanded: initiallyExpanded)
+            } else {
+                if style == .bar {
+                    HistoryBarChart(metric: .disk, history: history, end: end, color: color).frame(height: 66)
+                } else {
+                    MetricChart(metric: .disk, history: history, end: end, color: color).frame(height: 66)
+                }
                 HStack(spacing: 14) {
-                    rateGauge(disk?.activity?.read, upper: upper, tint: color)
-                    rateGauge(disk?.activity?.write, upper: upper, tint: .orange)
+                    rate(L10n.text("읽기"), disk?.activity?.read, color)
+                    rate(L10n.text("쓰기"), disk?.activity?.write, .orange)
                 }
             }
             if let message = disk?.activityMessage {
@@ -39,15 +37,7 @@ struct DiskVisualization: View {
             Spacer(minLength: 0)
             Text(value.map(ValueFormat.rate) ?? "—").monospacedDigit().fontWeight(.medium)
         }.font(.system(size: 11)).frame(maxWidth: .infinity)
-            .accessibilityElement(children: .ignore).accessibilityLabel("디스크 \(label) 속도")
-            .accessibilityValue(value.map(ValueFormat.rate) ?? "측정값 없음")
-    }
-    private func rateGauge(_ value: Double?, upper: Double, tint: Color) -> some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .leading) {
-                Capsule().fill(.secondary.opacity(0.16))
-                if let value { Capsule().fill(tint).frame(width: geometry.size.width * min(1, max(0, value / upper))) }
-            }
-        }.frame(height: 6).accessibilityHidden(true)
+            .accessibilityElement(children: .ignore).accessibilityLabel(L10n.text("디스크 \(label) 속도"))
+            .accessibilityValue(value.map(ValueFormat.rate) ?? L10n.text("측정값 없음"))
     }
 }

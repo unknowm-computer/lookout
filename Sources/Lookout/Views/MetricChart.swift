@@ -38,8 +38,8 @@ struct MetricChart: View {
                 .frame(width: (metric == .network || metric == .disk || metric == .power) ? 48 : 22, alignment: .trailing)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(metric.title) 최근 5분 그래프")
-        .accessibilityValue(history.last?.primary.map { (metric == .network || metric == .disk) ? ValueFormat.rate($0) : metric == .power ? ValueFormat.watts($0) : ValueFormat.percent($0) } ?? "측정값 없음")
+        .accessibilityLabel(L10n.text("\(metric.title) 최근 5분 그래프"))
+        .accessibilityValue(history.last?.primary.map { (metric == .network || metric == .disk) ? ValueFormat.rate($0) : metric == .power ? ValueFormat.watts($0) : ValueFormat.percent($0) } ?? L10n.text("측정값 없음"))
     }
     private func axisLabel(_ value: Double) -> String {
         (metric == .network || metric == .disk) ? ValueFormat.rate(value) : metric == .power ? ValueFormat.watts(value) : "\(Int(value))"

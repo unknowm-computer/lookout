@@ -5,10 +5,12 @@
     <key>CFBundleIdentifier</key><string>local.lookout.app</string>
     <key>CFBundleName</key><string>Lookout</string>
     <key>CFBundleDisplayName</key><string>Lookout</string>
+    <key>CFBundleDevelopmentRegion</key><string>en</string>
+    <key>CFBundleLocalizations</key><array><string>en</string><string>ko</string></array>
     <key>CFBundleExecutable</key><string>Lookout</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.6.1</string>
-    <key>CFBundleVersion</key><string>7</string>
+    <key>CFBundleShortVersionString</key><string>0.6.2</string>
+    <key>CFBundleVersion</key><string>8</string>
     <key>SUEnableAutomaticChecks</key><false/>
     <key>SUAutomaticallyUpdate</key><false/>
     <key>SUAllowsAutomaticUpdates</key><false/>

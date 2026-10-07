@@ -4,7 +4,7 @@ public enum ChartStyle: String, CaseIterable, Codable, Sendable, Identifiable {
     case automatic, line, bar, gauge
     public var id: String { rawValue }
     public var title: String {
-        switch self { case .automatic: "자동"; case .line: "라인"; case .bar: "바"; case .gauge: "게이지" }
+        switch self { case .automatic: L10n.text("자동"); case .line: L10n.text("라인"); case .bar: L10n.text("바"); case .gauge: L10n.text("게이지") }
     }
     public static func available(for metric: Metric) -> [ChartStyle] {
         metric == .memory ? [.automatic, .bar, .gauge] : allCases

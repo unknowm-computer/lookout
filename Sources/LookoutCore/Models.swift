@@ -5,8 +5,8 @@ public enum Metric: String, CaseIterable, Codable, Sendable, Identifiable {
     public var id: String { rawValue }
     public var title: String {
         switch self {
-        case .cpu: "CPU"; case .memory: "메모리"; case .network: "네트워크"
-        case .disk: "디스크"; case .ssd: "SSD"; case .power: "에너지"; case .gpu: "GPU"
+        case .cpu: "CPU"; case .memory: L10n.text("메모리"); case .network: L10n.text("네트워크")
+        case .disk: L10n.text("디스크"); case .ssd: "SSD"; case .power: L10n.text("에너지"); case .gpu: "GPU"
         }
     }
     public var symbol: String {
@@ -24,6 +24,7 @@ public enum Metric: String, CaseIterable, Codable, Sendable, Identifiable {
 }
 
 public struct MonitorConfiguration: Equatable, Sendable {
+    public static let defaultInterval = 3
     public var enabled: Set<Metric>
     public var order: [Metric]
     public var interval: Int
@@ -31,17 +32,19 @@ public struct MonitorConfiguration: Equatable, Sendable {
     public var storageInterval: Int
     public var menuBarGrouping: MenuBarGrouping
     public init(enabled: Set<Metric> = Set(Metric.allCases), order: [Metric] = Metric.allCases,
-                interval: Int = 2, interface: String? = nil, storageInterval: Int = 30,
+                interval: Int = MonitorConfiguration.defaultInterval, interface: String? = nil, storageInterval: Int = 30,
                 menuBarGrouping: MenuBarGrouping = MenuBarGrouping()) {
         self.enabled = enabled
         var seen: Set<Metric> = []
         self.order = (order + Metric.allCases).filter { seen.insert($0).inserted }
-        self.interval = [1, 2, 3, 5].contains(interval) ? interval : 2
+        self.interval = [1, 2, 3, 5].contains(interval) ? interval : Self.defaultInterval
         self.interface = interface
         self.storageInterval = StoragePollingInterval(rawValue: storageInterval)?.rawValue ?? 30
         self.menuBarGrouping = menuBarGrouping
     }
     public var visible: [Metric] { order.filter { enabled.contains($0) } }
+    /// Detail panels follow group placement and show the upper member before its partner.
+    public var detailMetrics: [Metric] { menuBarGrouping.units(metrics: visible).flatMap(\.metrics) }
     public var needsStorageCapacity: Bool {
         enabled.contains(.ssd)
     }
@@ -76,7 +79,7 @@ public struct SettingsRecord: Codable, Sendable {
         }
         return MonitorConfiguration(
             enabled: selected, order: placement,
-            interval: interval ?? 2, interface: interface, storageInterval: storageInterval ?? 30,
+            interval: interval ?? MonitorConfiguration.defaultInterval, interface: interface, storageInterval: storageInterval ?? 30,
             menuBarGrouping: menuBarGrouping ?? MenuBarGrouping()
         )
     }
@@ -147,7 +150,7 @@ public struct DiskReading: Sendable {
     public let activity: DiskActivityReading?
     public let activityMessage: String?
     public let capacityMessage: String?
-    public var name: String { capacity?.name ?? "시작 디스크" }
+    public var name: String { capacity?.name ?? L10n.text("시작 디스크") }
     public var total: Double { capacity?.total ?? 0 }
     public var available: Double { capacity?.available ?? 0 }
     public var used: Double { capacity?.used ?? 0 }
@@ -248,7 +251,7 @@ public enum ValueFormat {
         String(format: "%.1f %@", bytes / (bytes >= 1e12 ? 1e12 : 1e9), bytes >= 1e12 ? "TB" : "GB")
     }
     public static func duration(_ minutes: Int) -> String {
-        minutes >= 60 ? "\(minutes / 60)시간 \(minutes % 60)분" : "\(minutes)분"
+        minutes >= 60 ? L10n.text("\(minutes / 60)시간 \(minutes % 60)분") : L10n.text("\(minutes)분")
     }
     public static func rate(_ bytes: Double) -> String {
         let units = ["B/s", "KB/s", "MB/s", "GB/s"]

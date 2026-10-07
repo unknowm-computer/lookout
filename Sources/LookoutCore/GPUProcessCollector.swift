@@ -27,7 +27,7 @@ struct GPUProcessState {
                 primary: (rates[counter.process]?.primary ?? 0) + value)
         }
         return ProcessListReading(processes: Array(rates.values), message: counters.isEmpty ?
-            "이 Mac에서 프로세스별 GPU 통계를 제공하지 않습니다." : rates.isEmpty ? "다음 GPU 프로세스 측정을 기다리는 중" : nil)
+            L10n.text("이 Mac에서 프로세스별 GPU 통계를 제공하지 않습니다.") : rates.isEmpty ? L10n.text("다음 GPU 프로세스 측정을 기다리는 중") : nil)
     }
 }
 
@@ -39,7 +39,7 @@ struct GPUProcessCollector {
         let byPID = Dictionary(processes.map { ($0.id.pid, $0) }, uniquingKeysWith: { _, latest in latest })
         var services: io_iterator_t = 0
         guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOAccelerator"), &services) == KERN_SUCCESS else {
-            state.reset(); throw CollectionError.system("GPU 프로세스 통계를 읽을 수 없습니다.")
+            state.reset(); throw CollectionError.system(L10n.text("GPU 프로세스 통계를 읽을 수 없습니다."))
         }
         defer { IOObjectRelease(services) }
         var counters: [GPUClientCounter] = []

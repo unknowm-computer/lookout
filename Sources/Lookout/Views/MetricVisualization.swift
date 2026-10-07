@@ -9,13 +9,15 @@ struct MetricVisualization: View {
     let preference: ChartStyle
     let color: Color
     let showsSwapDetails: Bool
+    let initiallyExpanded: Bool
     @State private var historyExpanded: Bool
     init(metric: Metric, reading: MetricReading?, history: [HistoryPoint], end: Date,
-         preference: ChartStyle, color: Color, showsSwapDetails: Bool = false) {
+         preference: ChartStyle, color: Color, showsSwapDetails: Bool = false, initiallyExpanded: Bool = false) {
         self.metric = metric; self.reading = reading; self.history = history; self.end = end
         self.preference = preference; self.color = color
         self.showsSwapDetails = showsSwapDetails
-        _historyExpanded = State(initialValue: [.cpu, .gpu, .memory].contains(metric))
+        self.initiallyExpanded = initiallyExpanded
+        _historyExpanded = State(initialValue: initiallyExpanded)
     }
     private var style: ChartStyle { preference.resolved(for: metric) }
     private var showsHistoryBars: Bool { style == .bar && [.cpu, .gpu, .network].contains(metric) }
@@ -23,30 +25,32 @@ struct MetricVisualization: View {
         VStack(alignment: .leading, spacing: 8) {
             if metric == .memory {
                 MemoryMetricVisualization(reading: reading, history: history, end: end, style: style,
-                                          showsSwapDetails: showsSwapDetails)
+                                          showsSwapDetails: showsSwapDetails, initiallyExpanded: initiallyExpanded)
             } else if metric == .disk {
-                DiskVisualization(reading: reading, history: history, end: end, style: style, color: color)
+                DiskVisualization(reading: reading, history: history, end: end, style: style, color: color,
+                                  initiallyExpanded: initiallyExpanded)
             } else if metric == .power {
                 EnergyVisualization(reading: reading, history: history, end: end, style: style, color: color)
+            } else if metric == .network && style == .gauge {
+                RateGaugeHistory(metric: metric, reading: reading, history: history, end: end, color: color,
+                                 initiallyExpanded: initiallyExpanded)
             } else if style == .line {
                 line
             } else if showsHistoryBars {
                 HistoryBarChart(metric: metric, history: history, end: end, color: color).frame(height: (metric == .network || metric == .disk) ? 82 : 66)
-                Text("최근 5분 · 5초 평균").font(.system(size: 9)).foregroundStyle(.secondary)
+                if metric != .network {
+                    Text(L10n.text("최근 5분 · 5초 평균")).font(.system(size: 9)).foregroundStyle(.secondary)
+                }
             } else if style == .gauge && [.cpu, .gpu, .memory, .disk].contains(metric) {
                 PercentGaugeHistory(metric: metric, value: reading?.value?.primary,
                                     history: history, end: end, color: color)
             } else {
-                if style == .bar {
-                    CurrentMetricBar(metric: metric, value: reading?.value, color: color)
-                } else {
-                    NetworkGauges(value: reading?.value, upper: ChartData.rateUpperBound(history: history, current: reading?.value), color: color)
-                }
+                CurrentMetricBar(metric: metric, value: reading?.value, color: color)
                 // A current-value display never replaces access to the existing history.
-                DisclosureGroup("최근 5분 기록", isExpanded: $historyExpanded) { line.padding(.top, 5) }
+                DisclosureGroup(L10n.text("최근 5분 기록"), isExpanded: $historyExpanded) { line.padding(.top, 5) }
                     .font(.system(size: 10)).tint(.secondary)
             }
-        }
+        }.onChange(of: initiallyExpanded) { _, value in historyExpanded = value }
     }
     private var line: some View {
         MetricChart(metric: metric, history: history, end: end, color: color).frame(height: 66)
@@ -65,7 +69,7 @@ struct PercentGaugeHistory: View {
             HStack(alignment: .bottom, spacing: 14) {
                 PercentGauge(value: value, color: color, segments: segments).frame(width: 108, height: 66)
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("최근 5분 기록").font(.system(size: 9)).foregroundStyle(.secondary)
+                    Text(L10n.text("최근 5분 기록")).font(.system(size: 9)).foregroundStyle(.secondary)
                     MetricChart(metric: metric, history: history, end: end, color: color).frame(height: 50)
                 }.frame(maxWidth: .infinity)
             }
@@ -79,8 +83,8 @@ private struct GaugeUsageSummary: View {
     var body: some View {
         HStack(spacing: 12) {
             Spacer(minLength: 0)
-            row("평균", statistics.average)
-            row("최고", statistics.maximum)
+            row(L10n.text("평균"), statistics.average)
+            row(L10n.text("최고"), statistics.maximum)
         }
     }
     private func row(_ title: String, _ value: Double?) -> some View {
@@ -90,8 +94,8 @@ private struct GaugeUsageSummary: View {
                 .frame(width: 34, alignment: .trailing)
         }.font(.system(size: 10))
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("최근 5분 \(title) 사용률")
-            .accessibilityValue(value.map(ValueFormat.percent) ?? "측정값 없음")
+            .accessibilityLabel(L10n.text("최근 5분 \(title) 사용률"))
+            .accessibilityValue(value.map(ValueFormat.percent) ?? L10n.text("측정값 없음"))
     }
 }
 
@@ -136,8 +140,8 @@ struct HistoryBarChart: View {
             }.font(.system(size: 8)).foregroundStyle(.secondary).frame(width: (metric == .network || metric == .disk || metric == .power) ? 59 : 22, alignment: .trailing)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(metric.title) 최근 5분 막대 그래프 · 5초 평균")
-        .accessibilityValue(history.last?.primary.map { (metric == .network || metric == .disk) ? ValueFormat.rate($0) : metric == .power ? ValueFormat.watts($0) : ValueFormat.percent($0) } ?? "측정값 없음")
+        .accessibilityLabel(L10n.text("\(metric.title) 최근 5분 막대 그래프 · 5초 평균"))
+        .accessibilityValue(history.last?.primary.map { (metric == .network || metric == .disk) ? ValueFormat.rate($0) : metric == .power ? ValueFormat.watts($0) : ValueFormat.percent($0) } ?? L10n.text("측정값 없음"))
     }
 }
 
@@ -153,13 +157,13 @@ private struct PercentGauge: View {
     private var hoveredSegment: UsageBarSegment? { segments?.first { $0.id == hoveredID } }
     private var validValue: Double? { value.flatMap { $0.isFinite ? min(100, max(0, $0)) : nil } }
     private var accessibilitySummary: String {
-        let usage = validValue.map(ValueFormat.percent) ?? "측정값 없음"
+        let usage = validValue.map(ValueFormat.percent) ?? L10n.text("측정값 없음")
         guard let segments, !segments.isEmpty else { return usage }
-        return segments.map(\.summary).joined(separator: ", ") + " · 사용률 \(usage)"
+        return segments.map(\.summary).joined(separator: ", ") + L10n.text(" · 사용률 \(usage)")
     }
     var body: some View {
         Group {
-            if segments == nil { gaugeContent.help("현재 전체 사용률") }
+            if segments == nil { gaugeContent.help(L10n.text("현재 전체 사용률")) }
             else { gaugeContent }
         }
     }
@@ -227,7 +231,7 @@ private struct PercentGauge: View {
         }
         .onDisappear { dismissTooltip() }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(segments == nil ? "현재 사용률 게이지" : "메모리 구성 게이지")
+        .accessibilityLabel(segments == nil ? L10n.text("현재 사용률 게이지") : L10n.text("메모리 구성 게이지"))
         .accessibilityValue(accessibilitySummary)
     }
     private func updateHover(size: CGSize) {
@@ -275,49 +279,19 @@ private struct CurrentMetricBar: View {
                 }
             }.frame(height: 13)
             HStack {
-                Text(value?.primary.map { "사용 \(ValueFormat.percent($0))" } ?? "측정값 없음")
+                Text(value?.primary.map { L10n.text("사용 \(ValueFormat.percent($0))") } ?? L10n.text("측정값 없음"))
                 Spacer()
-                if case .disk(let disk) = value { Text("여유 \(ValueFormat.storage(disk.available))") }
+                if case .disk(let disk) = value { Text(L10n.text("여유 \(ValueFormat.storage(disk.available))")) }
                 else { Text("100%") }
             }.font(.system(size: 9)).foregroundStyle(.secondary).monospacedDigit()
         }
-        .accessibilityElement(children: .ignore).accessibilityLabel("\(metric.title) 현재 상태 막대")
+        .accessibilityElement(children: .ignore).accessibilityLabel(L10n.text("\(metric.title) 현재 상태 막대"))
         .accessibilityValue(accessibilitySummary)
     }
     private var accessibilitySummary: String {
         switch value {
-        case .disk(let disk): return "사용 \(ValueFormat.storage(disk.used)), 여유 \(ValueFormat.storage(disk.available))"
-        default: return value?.primary.map(ValueFormat.percent) ?? "측정값 없음"
+        case .disk(let disk): return L10n.text("사용 \(ValueFormat.storage(disk.used)), 여유 \(ValueFormat.storage(disk.available))")
+        default: return value?.primary.map(ValueFormat.percent) ?? L10n.text("측정값 없음")
         }
-    }
-}
-
-private struct NetworkGauges: View {
-    let value: ReadingValue?
-    let upper: Double
-    let color: Color
-    private var network: NetworkReading? { if case .network(let network) = value { return network }; return nil }
-    var body: some View {
-        VStack(spacing: 7) {
-            row("↓", network?.download, color)
-            row("↑", network?.upload, .orange)
-            Text("눈금 자동 · 최대 \(ValueFormat.rate(upper)) · 회선 용량 대비 비율이 아닙니다.")
-                .font(.system(size: 9)).foregroundStyle(.secondary)
-        }
-    }
-    private func row(_ arrow: String, _ rate: Double?, _ tint: Color) -> some View {
-        VStack(spacing: 3) {
-            HStack { Text(arrow).foregroundStyle(tint); Spacer(); Text(rate.map(ValueFormat.rate) ?? "—").monospacedDigit() }.font(.system(size: 10))
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(.secondary.opacity(0.16))
-                    if let rate, rate.isFinite {
-                        Capsule().fill(tint).frame(width: geometry.size.width * min(1, max(0, rate / upper)))
-                    }
-                }
-            }.frame(height: 6)
-        }.accessibilityElement(children: .ignore)
-            .accessibilityLabel(arrow == "↓" ? "다운로드 속도 게이지" : "업로드 속도 게이지")
-            .accessibilityValue(rate.map(ValueFormat.rate) ?? "측정값 없음")
     }
 }

@@ -8,7 +8,7 @@ import SwiftUI
     @Published private(set) var presented = false
     @Published private(set) var displayedMetrics: [Metric] = []
     var displayedUnits: [MenuBarUnit] { settings.configuration.menuBarGrouping.units(metrics: displayedMetrics) }
-    @Published private(set) var layoutMessage = "메뉴바 위치를 확인하는 중입니다."
+    @Published private(set) var layoutMessage = L10n.text("메뉴바 위치를 확인하는 중입니다.")
     @Published private(set) var layoutScreenName: String?
     private let settings: SettingsStore
     private let monitor: MonitoringCoordinator
@@ -111,7 +111,7 @@ import SwiftUI
             automaticLimit = nil
             expansionGate = MenuBarExpansionGate()
             layoutConfiguration = nextLayout
-            if settings.menuBarDensity == .automatic { layoutMessage = "메뉴바 위치를 확인하는 중입니다." }
+            if settings.menuBarDensity == .automatic { layoutMessage = L10n.text("메뉴바 위치를 확인하는 중입니다.") }
         }
         let visible = settings.menuBarDensity.metrics(configuration: settings.configuration,
             priority: settings.menuBarPriority, automaticLimit: automaticLimit)
@@ -132,7 +132,7 @@ import SwiftUI
             placementOrder = settings.configuration.order
         }
         if displayedMetrics != visible { displayedMetrics = visible }
-        if visible.isEmpty { layoutMessage = "모니터링할 항목을 선택하세요." }
+        if visible.isEmpty { layoutMessage = L10n.text("모니터링할 항목을 선택하세요.") }
         for slot in Array(statusItems.keys) where !slots.contains(slot) {
             if let item = statusItems.removeValue(forKey: slot) { removeStatusItem(item) }
         }
@@ -161,7 +161,7 @@ import SwiftUI
         let alerting = Set(monitor.activeAlerts.map(\.metric)).intersection(monitored)
         let hasAlert = !alerting.isEmpty
         if metrics.isEmpty {
-            button.image = NSImage(systemSymbolName: "chart.bar.xaxis", accessibilityDescription: "Lookout · 모니터링 꺼짐")
+            button.image = NSImage(systemSymbolName: "chart.bar.xaxis", accessibilityDescription: L10n.text("Lookout · 모니터링 꺼짐"))
             button.subviews.compactMap { $0 as? MenuBarAccentOverlay }.forEach { $0.removeFromSuperview() }
         } else {
             let presentation = MenuBarRenderer.presentation(metrics: metrics, readings: monitor.readings,
@@ -175,9 +175,9 @@ import SwiftUI
             MenuBarAccentOverlay.update(button: button, presentation: presentation,
                                         pressure: pressure, storageMode: settings.menuBarValues.storage)
         }
-        button.toolTip = (slot.unit.map { "Lookout · \($0.title)" } ?? "Lookout · 전체 모니터링")
+        button.toolTip = (slot.unit.map { "Lookout · \($0.title)" } ?? L10n.text("Lookout · 전체 모니터링"))
             + "\n" + accessibilityValue(metrics: metrics)
-        button.setAccessibilityLabel(slot.unit.map { "Lookout \($0.title)" } ?? "Lookout 모니터링")
+        button.setAccessibilityLabel(slot.unit.map { "Lookout \($0.title)" } ?? L10n.text("Lookout 모니터링"))
         button.setAccessibilityValue(accessibilityValue(metrics: metrics))
     }
     private func scheduleLayoutCheck() {
@@ -196,8 +196,8 @@ import SwiftUI
         let preferredScreen = NSApp.isActive && settingsWindow?.isKeyWindow == true ? settingsWindow?.screen : nil
         guard let measurement = MenuBarGeometry.measure(statusItems.values.compactMap(\.button),
                                                         preferredScreen: preferredScreen) else {
-            if layoutMessage != "현재 메뉴바 위치를 확인하지 못했습니다. 필요하면 축소·최소를 선택하세요." {
-                layoutMessage = "현재 메뉴바 위치를 확인하지 못했습니다. 필요하면 축소·최소를 선택하세요."
+            if layoutMessage != L10n.text("현재 메뉴바 위치를 확인하지 못했습니다. 필요하면 축소·최소를 선택하세요.") {
+                layoutMessage = L10n.text("현재 메뉴바 위치를 확인하지 못했습니다. 필요하면 축소·최소를 선택하세요.")
             }
             return
         }
@@ -207,10 +207,10 @@ import SwiftUI
         let limit = expansionGate.resolve(target: target, current: settings.configuration.menuBarGrouping.units(metrics: displayedMetrics).count,
                                           uptime: ProcessInfo.processInfo.systemUptime)
         let message = measurement.available < (widths.first ?? 0)
-            ? "공간이 매우 좁아 최우선 항목만 유지합니다. 메뉴바의 다른 항목을 옮기면 공간을 확보할 수 있습니다."
-            : (target > limit ? "공간이 확보되어 숨긴 항목을 복원하는 중입니다."
-               : (limit < ranked.count ? "공간이 부족해 낮은 우선순위 항목을 숨겼습니다. 공간이 확보되면 다시 표시합니다."
-                                       : "공간이 충분해 전체 항목을 표시합니다."))
+            ? L10n.text("공간이 매우 좁아 최우선 항목만 유지합니다. 메뉴바의 다른 항목을 옮기면 공간을 확보할 수 있습니다.")
+            : (target > limit ? L10n.text("공간이 확보되어 숨긴 항목을 복원하는 중입니다.")
+               : (limit < ranked.count ? L10n.text("공간이 부족해 낮은 우선순위 항목을 숨겼습니다. 공간이 확보되면 다시 표시합니다.")
+                                       : L10n.text("공간이 충분해 전체 항목을 표시합니다.")))
         if layoutMessage != message { layoutMessage = message }
         if ProcessInfo.processInfo.environment["LOOKOUT_LAYOUT_DIAGNOSTICS"] == "1" {
             let line = "Layout screen=\(measurement.screenName) budget=\(measurement.available) widths=\(widths) frames=\(measurement.frames) shown=\(displayedMetrics.map(\.rawValue)) target=\(target) next=\(limit)\n"
@@ -227,15 +227,15 @@ import SwiftUI
             let text: String
             switch value {
             case .memory(let memory):
-                text = "\(settings.menuBarValues.memory.title) \(settings.menuBarValues.text(for: .memory, value: value)), 메모리 압력 \(memory.pressure?.title ?? "확인 불가")"
+                text = L10n.text("\(settings.menuBarValues.memory.title) \(settings.menuBarValues.text(for: .memory, value: value)), 메모리 압력 \(memory.pressure?.title ?? L10n.text("확인 불가"))")
             case .storage:
                 text = "\(settings.menuBarValues.storage.title) \(settings.menuBarValues.text(for: .ssd, value: value))"
-            case .network(let network): text = "다운로드 \(ValueFormat.rate(network.download)), 업로드 \(ValueFormat.rate(network.upload))"
-            case .disk(let disk): text = "읽기 \(disk.activity.map { ValueFormat.rate($0.read) } ?? "—"), 쓰기 \(disk.activity.map { ValueFormat.rate($0.write) } ?? "—")"
+            case .network(let network): text = L10n.text("다운로드 \(ValueFormat.rate(network.download)), 업로드 \(ValueFormat.rate(network.upload))")
+            case .disk(let disk): text = L10n.text("읽기 \(disk.activity.map { ValueFormat.rate($0.read) } ?? "—"), 쓰기 \(disk.activity.map { ValueFormat.rate($0.write) } ?? "—")")
             case .power(let energy): text = energy.watts.map(ValueFormat.watts) ?? "—"
             default: text = value?.primary.map(ValueFormat.percent) ?? "—"
             }
-            let warning = monitor.activeAlerts.contains { $0.metric == metric } ? " · 경고" : ""
+            let warning = monitor.activeAlerts.contains { $0.metric == metric } ? L10n.text(" · 경고") : ""
             return "\(metric.title) \(text)\(warning)"
         }.joined(separator: ", ")
     }
@@ -296,7 +296,7 @@ import SwiftUI
         if settingsWindow == nil {
             let host = NSHostingController(rootView: SettingsView(settings: settings, monitor: monitor, updates: updates, menuBar: self))
             let window = NSWindow(contentViewController: host)
-            window.title = "Lookout 설정"
+            window.title = L10n.text("Lookout 설정")
             window.styleMask = [.titled, .closable, .miniaturizable]
             window.isReleasedWhenClosed = false
             window.setContentSize(NSSize(width: 480, height: 560))

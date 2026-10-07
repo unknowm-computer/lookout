@@ -21,9 +21,9 @@ public enum UpdateConfigurationError: LocalizedError {
     case incomplete, invalidFeed, invalidKey
     public var errorDescription: String? {
         switch self {
-        case .incomplete: "업데이트 배포 설정이 아직 완료되지 않았습니다."
-        case .invalidFeed: "업데이트 주소 설정을 확인해야 합니다."
-        case .invalidKey: "업데이트 검증 키 설정을 확인해야 합니다."
+        case .incomplete: L10n.text("업데이트 배포 설정이 아직 완료되지 않았습니다.")
+        case .invalidFeed: L10n.text("업데이트 주소 설정을 확인해야 합니다.")
+        case .invalidKey: L10n.text("업데이트 검증 키 설정을 확인해야 합니다.")
         }
     }
 }

@@ -4,7 +4,7 @@ public enum MenuBarDisplayMode: String, CaseIterable, Sendable, Identifiable {
     case individual, combined
     public var id: String { rawValue }
     public var title: String {
-        switch self { case .individual: "항목별 표시"; case .combined: "통합 표시" }
+        switch self { case .individual: L10n.text("항목별 표시"); case .combined: L10n.text("통합 표시") }
     }
 }
 
@@ -13,8 +13,8 @@ public enum MenuBarDensity: String, CaseIterable, Sendable, Identifiable {
     public var id: String { rawValue }
     public var title: String {
         switch self {
-        case .automatic: "자동"; case .normal: "일반"
-        case .compact: "축소"; case .minimal: "최소"
+        case .automatic: L10n.text("자동"); case .normal: L10n.text("일반")
+        case .compact: L10n.text("축소"); case .minimal: L10n.text("최소")
         }
     }
     /// Presentation only: never alter collection, alerts or the full detail panel's selection.

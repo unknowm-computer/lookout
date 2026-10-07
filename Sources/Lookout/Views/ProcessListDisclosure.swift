@@ -11,7 +11,7 @@ struct ProcessListDisclosure: View {
     @State private var owner = UUID()
     private var list: ProcessListReading? {
         if metric == .power {
-            guard case .power(let energy) = reading?.value else { return ProcessListReading(message: reading?.message ?? "측정을 시작하는 중") }
+            guard case .power(let energy) = reading?.value else { return ProcessListReading(message: reading?.message ?? L10n.text("측정을 시작하는 중")) }
             return ProcessListReading(processes: energy.processes.map {
                 ProcessUsage(id: $0.id, name: $0.name, primary: $0.watts)
             }, message: energy.message)
@@ -20,13 +20,13 @@ struct ProcessListDisclosure: View {
     }
     private var scope: String {
         switch metric {
-        case .cpu: "CPU 사용률순 · 코어 1개 = 100%"
-        case .memory: "메모리 점유량순"
-        case .ssd: "저장공간은 프로세스 목록을 제공하지 않습니다."
-        case .disk: "읽기 + 쓰기 속도순 · 전체 디스크"
-        case .network: "다운로드 + 업로드 속도순 · 전체 인터페이스"
-        case .gpu: "GPU 실행 시간 비율순 · 드라이버 추정치"
-        case .power: "추정 전력순"
+        case .cpu: L10n.text("CPU 사용률순 · 코어 1개 = 100%")
+        case .memory: L10n.text("메모리 점유량순")
+        case .ssd: L10n.text("저장공간은 프로세스 목록을 제공하지 않습니다.")
+        case .disk: L10n.text("읽기 + 쓰기 속도순 · 전체 디스크")
+        case .network: L10n.text("다운로드 + 업로드 속도순 · 전체 인터페이스")
+        case .gpu: L10n.text("GPU 실행 시간 비율순 · 드라이버 추정치")
+        case .power: L10n.text("추정 전력순")
         }
     }
     var body: some View {
@@ -38,7 +38,7 @@ struct ProcessListDisclosure: View {
                     if let message = list.message {
                         Text(message).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     } else if list.processes.isEmpty {
-                        Text("현재 측정 구간의 사용 없음").foregroundStyle(.secondary)
+                        Text(L10n.text("현재 측정 구간의 사용 없음")).foregroundStyle(.secondary)
                     } else {
                         if expanded && visible {
                             ForEach(list.processes) { process in
@@ -56,15 +56,15 @@ struct ProcessListDisclosure: View {
                                 .accessibilityValue(value(process))
                             }
                         }
-                        Text("접근 가능한 프로세스 중 상위 \(list.processes.count)개")
+                        Text(L10n.text("접근 가능한 프로세스 중 상위 \(list.processes.count)개"))
                             .font(.system(size: 9)).foregroundStyle(.secondary)
                     }
                 } else {
-                    Text("프로세스 측정을 시작하는 중").foregroundStyle(.secondary)
+                    Text(L10n.text("프로세스 측정을 시작하는 중")).foregroundStyle(.secondary)
                 }
             }.font(.system(size: 10)).padding(.top, 5)
         } label: {
-            Text("프로세스 · 최대 5개").font(.system(size: 10)).foregroundStyle(.secondary)
+            Text(L10n.text("프로세스 · 최대 5개")).font(.system(size: 10)).foregroundStyle(.secondary)
         }
         .accessibilityIdentifier("processes-\(metric.rawValue)")
         .onAppear {

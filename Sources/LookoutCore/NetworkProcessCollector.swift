@@ -13,7 +13,7 @@ enum NetworkProcessCollector {
         var frames: [[Row]] = []
         var columns: [String] = []
         for line in output.split(whereSeparator: \.isNewline) {
-            guard let fields = csv(String(line)) else { return ProcessListReading(message: "네트워크 프로세스 응답 형식이 올바르지 않습니다.") }
+            guard let fields = csv(String(line)) else { return ProcessListReading(message: L10n.text("네트워크 프로세스 응답 형식이 올바르지 않습니다.")) }
             if fields.contains("time"), fields.contains("bytes_in"), fields.contains("bytes_out") {
                 columns = fields; frames.append([]); continue
             }
@@ -24,12 +24,12 @@ enum NetworkProcessCollector {
                   let separator = fields[nameColumn].lastIndex(of: "."),
                   let pid = Int32(fields[nameColumn][fields[nameColumn].index(after: separator)...]), pid > 0,
                   let received = UInt64(fields[input]), let sent = UInt64(fields[out]) else {
-                return ProcessListReading(message: "네트워크 프로세스 응답 형식이 올바르지 않습니다.")
+                return ProcessListReading(message: L10n.text("네트워크 프로세스 응답 형식이 올바르지 않습니다."))
             }
             frames[frames.count - 1].append(Row(pid: pid, name: String(fields[nameColumn][..<separator]),
                 time: time, received: received, sent: sent))
         }
-        guard frames.count == 2 else { return ProcessListReading(message: "네트워크 프로세스 측정을 완료하지 못했습니다.") }
+        guard frames.count == 2 else { return ProcessListReading(message: L10n.text("네트워크 프로세스 측정을 완료하지 못했습니다.")) }
         let previous = Dictionary(frames[0].map { ($0.pid, $0) }, uniquingKeysWith: { _, last in last })
         let current = Dictionary(frames[1].map { ($0.pid, $0) }, uniquingKeysWith: { _, last in last })
         var invalidTime = false
@@ -42,7 +42,7 @@ enum NetworkProcessCollector {
             return ProcessUsage(id: EnergyProcessID(pid: row.pid, started: 0), name: row.name,
                 primary: Double(row.received) / elapsed, secondary: Double(row.sent) / elapsed)
         }
-        return invalidTime ? ProcessListReading(message: "네트워크 측정 간격을 확인할 수 없습니다.") : ProcessListReading(processes: rows)
+        return invalidTime ? ProcessListReading(message: L10n.text("네트워크 측정 간격을 확인할 수 없습니다.")) : ProcessListReading(processes: rows)
     }
     private static func clockSeconds(_ value: String) -> Double? {
         let parts = value.split(separator: ":")
@@ -91,11 +91,11 @@ private final class NetworkProcessCommand: @unchecked Sendable {
         child.arguments = ["-P", "-L", "2", "-d", "-n", "-x", "-J", "time,bytes_in,bytes_out", "-s", "1"]
         child.standardOutput = pipe; child.standardError = FileHandle.nullDevice
         lock.lock()
-        guard !cancelled else { lock.unlock(); return ProcessListReading(message: "측정 중단") }
+        guard !cancelled else { lock.unlock(); return ProcessListReading(message: L10n.text("측정 중단")) }
         process = child
         do { try child.run() } catch {
             process = nil; lock.unlock()
-            return ProcessListReading(message: "네트워크 프로세스 통계를 시작할 수 없습니다.")
+            return ProcessListReading(message: L10n.text("네트워크 프로세스 통계를 시작할 수 없습니다."))
         }
         lock.unlock()
         let timeout = DispatchWorkItem { [weak self] in self?.cancel() }
@@ -113,7 +113,7 @@ private final class NetworkProcessCommand: @unchecked Sendable {
         }
         child.waitUntilExit()
         guard child.terminationStatus == 0 else {
-            return ProcessListReading(message: "네트워크 프로세스 통계를 읽을 수 없습니다.")
+            return ProcessListReading(message: L10n.text("네트워크 프로세스 통계를 읽을 수 없습니다."))
         }
         let parsed = NetworkProcessCollector.parse(String(decoding: output, as: UTF8.self))
         return ProcessListReading(processes: parsed.processes.map { row in

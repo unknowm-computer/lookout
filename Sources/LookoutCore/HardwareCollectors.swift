@@ -10,23 +10,23 @@ extension SystemMetrics {
             .volumeNameKey, .volumeTotalCapacityKey, .volumeAvailableCapacityKey
         ])
         guard let total = values.volumeTotalCapacity, total > 0 else {
-            throw CollectionError.system("시작 디스크 용량을 읽을 수 없습니다.")
+            throw CollectionError.system(L10n.text("시작 디스크 용량을 읽을 수 없습니다."))
         }
         // Query separately so an unsupported reclaimable-capacity API does not lose basic capacity.
         let reclaimableValues = try? url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
         let available = try availableStorageCapacity(total: total, free: values.volumeAvailableCapacity,
             important: reclaimableValues?.volumeAvailableCapacityForImportantUsage)
-        return DiskReading(name: values.volumeName ?? "시작 디스크", total: Double(total), available: available)
+        return DiskReading(name: values.volumeName ?? L10n.text("시작 디스크"), total: Double(total), available: available)
     }
 
     /// Include macOS-reclaimable storage, as Storage settings does, without estimating caches ourselves.
     static func availableStorageCapacity(total: Int, free: Int?, important: Int64?) throws -> Double {
-        guard total > 0 else { throw CollectionError.system("시작 디스크 용량을 읽을 수 없습니다.") }
+        guard total > 0 else { throw CollectionError.system(L10n.text("시작 디스크 용량을 읽을 수 없습니다.")) }
         let validFree = free.flatMap { (0...total).contains($0) ? $0 : nil }
         if let important, important >= Int64(validFree ?? 0), important <= Int64(total) {
             return Double(important)
         }
-        guard let validFree else { throw CollectionError.system("시작 디스크 여유 공간을 읽을 수 없습니다.") }
+        guard let validFree else { throw CollectionError.system(L10n.text("시작 디스크 여유 공간을 읽을 수 없습니다.")) }
         return Double(validFree)
     }
 
@@ -35,7 +35,7 @@ extension SystemMetrics {
     public static func gpu() throws -> GPUReading {
         var iterator: io_iterator_t = 0
         guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOAccelerator"), &iterator) == KERN_SUCCESS else {
-            throw CollectionError.system("GPU 통계를 읽을 수 없습니다.")
+            throw CollectionError.system(L10n.text("GPU 통계를 읽을 수 없습니다."))
         }
         defer { IOObjectRelease(iterator) }
         var candidates: [(UInt64, GPUReading)] = []
@@ -54,7 +54,7 @@ extension SystemMetrics {
             }
         }
         guard let reading = candidates.min(by: { $0.0 < $1.0 })?.1 else {
-            throw CollectionError.system("이 Mac 또는 macOS에서 GPU 사용률 통계를 제공하지 않습니다.")
+            throw CollectionError.system(L10n.text("이 Mac 또는 macOS에서 GPU 사용률 통계를 제공하지 않습니다."))
         }
         return reading
     }

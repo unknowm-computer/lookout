@@ -1,3 +1,4 @@
+import LookoutCore
 import SwiftUI
 
 struct UsageBarSegment: Identifiable {
@@ -56,7 +57,7 @@ struct SegmentedUsageBar: View {
                 .accessibilityLabel(accessibilityTitle)
             } else {
                 RoundedRectangle(cornerRadius: 4).fill(.secondary.opacity(0.16))
-                    .accessibilityLabel("\(accessibilityTitle) · 측정값 없음")
+                    .accessibilityLabel(L10n.text("\(accessibilityTitle) · 측정값 없음"))
             }
         }.frame(height: 13)
             .zIndex(1)

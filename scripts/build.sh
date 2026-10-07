@@ -37,6 +37,13 @@ task_verify_universal "$task_app_dir/Contents/MacOS/Lookout.new"
 mv -f "$task_app_dir/Contents/MacOS/Lookout.new" "$task_app_dir/Contents/MacOS/Lookout"
 cp "$task_info_plist" "$task_app_dir/Contents/Info.plist"
 cp Resources/Sparkle-LICENSE.txt "$task_app_dir/Contents/Resources/Sparkle-LICENSE.txt"
+# SwiftPM generates Bundle.module for the shared Korean/English resources.
+task_localization_bundle="$task_bin_dir/Lookout_LookoutCore.bundle"
+if [ ! -d "$task_localization_bundle" ]; then
+    echo "Lookout localization resources are missing from the build products." >&2
+    exit 1
+fi
+ditto "$task_localization_bundle" "$task_app_dir/Contents/Resources/Lookout_LookoutCore.bundle"
 task_sparkle_framework="$PWD/.build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
 if [ ! -d "$task_sparkle_framework" ]; then
     echo "Sparkle.framework is missing from the resolved package artifacts." >&2

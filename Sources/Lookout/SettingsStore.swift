@@ -7,6 +7,7 @@ import LookoutCore
     @Published private(set) var alerts: AlertConfiguration
     @Published private(set) var charts: ChartPreferences
     @Published private(set) var showsSwapDetails: Bool
+    @Published private(set) var language: AppLanguage
     @Published private(set) var menuBarDisplayMode: MenuBarDisplayMode
     @Published private(set) var menuBarDensity: MenuBarDensity
     @Published private(set) var menuBarPriority: [Metric]
@@ -17,6 +18,7 @@ import LookoutCore
     init(defaults: UserDefaults = .standard, capabilities: MonitoringCapabilities = .current) {
         self.defaults = defaults
         self.capabilities = capabilities
+        language = AppLanguage.load(from: defaults)
         showsSwapDetails = defaults.bool(forKey: "showsSwapDetails.v1")
         menuBarValues = defaults.data(forKey: "menuBarValues.v1")
             .flatMap { try? JSONDecoder().decode(MenuBarValuePreferences.self, from: $0) } ?? MenuBarValuePreferences()
@@ -37,6 +39,11 @@ import LookoutCore
             .flatMap { try? JSONDecoder().decode(AlertConfiguration.self, from: $0) }?.normalized ?? AlertConfiguration()
         charts = defaults.data(forKey: "chartSettings.v1")
             .flatMap { try? JSONDecoder().decode(ChartPreferences.self, from: $0) }?.normalized ?? ChartPreferences()
+    }
+    func setLanguage(_ language: AppLanguage) {
+        guard language != self.language else { return }
+        defaults.set(language.rawValue, forKey: AppLanguage.preferenceKey)
+        self.language = language
     }
     func setMenuBarDisplayMode(_ mode: MenuBarDisplayMode) {
         guard mode != menuBarDisplayMode else { return }
@@ -107,7 +114,9 @@ import LookoutCore
         update(next)
     }
     func setInterval(_ interval: Int) {
-        var next = configuration; next.interval = [1, 2, 3, 5].contains(interval) ? interval : 2; update(next)
+        var next = configuration
+        next.interval = [1, 2, 3, 5].contains(interval) ? interval : MonitorConfiguration.defaultInterval
+        update(next)
     }
     func setStorageInterval(_ interval: Int) {
         var next = configuration; next.storageInterval = StoragePollingInterval(rawValue: interval)?.rawValue ?? 30; update(next)

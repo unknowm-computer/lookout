@@ -61,8 +61,8 @@ struct ProcessResourceState {
                 return ProcessUsage(id: counter.id, name: counter.name, primary: Double(counter.read - old.read) / elapsed,
                                     secondary: Double(counter.write - old.write) / elapsed)
             }
-            result[metric] = ProcessListReading(processes: rows, message: counters.isEmpty ? "접근 가능한 프로세스가 없습니다." :
-                rows.isEmpty && metric != .memory ? "다음 프로세스 측정을 기다리는 중" : nil)
+            result[metric] = ProcessListReading(processes: rows, message: counters.isEmpty ? L10n.text("접근 가능한 프로세스가 없습니다.") :
+                rows.isEmpty && metric != .memory ? L10n.text("다음 프로세스 측정을 기다리는 중") : nil)
         }
         return result
     }
@@ -73,10 +73,10 @@ struct ProcessResourceCollector {
     mutating func reset() { names.removeAll() }
     mutating func collect() throws -> [ProcessResourceCounter] {
         let count = proc_listallpids(nil, 0)
-        guard count > 0 else { throw CollectionError.system("프로세스 목록을 읽을 수 없습니다.") }
+        guard count > 0 else { throw CollectionError.system(L10n.text("프로세스 목록을 읽을 수 없습니다.")) }
         var pids = [Int32](repeating: 0, count: Int(count) + 128)
         let actual = pids.withUnsafeMutableBytes { proc_listallpids($0.baseAddress, Int32($0.count)) }
-        guard actual > 0, actual <= pids.count else { throw CollectionError.system("프로세스 목록을 읽을 수 없습니다.") }
+        guard actual > 0, actual <= pids.count else { throw CollectionError.system(L10n.text("프로세스 목록을 읽을 수 없습니다.")) }
         var counters: [ProcessResourceCounter] = []
         for pid in pids.prefix(Int(actual)) where pid > 0 {
             var info = rusage_info_v4()

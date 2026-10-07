@@ -52,7 +52,7 @@ public struct DiskSamplingState: Sendable {
             do {
                 let value = try readCapacity()
                 guard value.total > 0, value.total.isFinite, value.available.isFinite else {
-                    throw CollectionError.system("저장공간 정보를 읽을 수 없습니다.")
+                    throw CollectionError.system(L10n.text("저장공간 정보를 읽을 수 없습니다."))
                 }
                 capacity = DiskCapacityReading(name: value.name, total: value.total, available: value.available,
                                                sampledAt: date, uptime: uptime, pollingInterval: period)
@@ -70,7 +70,7 @@ public struct DiskSamplingState: Sendable {
             let counter = try readCounters()
             activity = previous.flatMap { counter.rate(since: $0) }
             previous = counter
-            if activity == nil { message = "다음 디스크 측정을 기다리는 중" }
+            if activity == nil { message = L10n.text("다음 디스크 측정을 기다리는 중") }
         } catch {
             previous = nil; message = error.localizedDescription
         }
@@ -87,18 +87,18 @@ extension SystemMetrics {
     /// do not sum APFS volumes, unrelated external devices, or mounted disk images.
     public static func diskCounters() throws -> DiskCounter {
         var fs = statfs()
-        guard statfs(startupDataPath, &fs) == 0 else { throw CollectionError.system("시작 디스크 장치를 찾을 수 없습니다.") }
+        guard statfs(startupDataPath, &fs) == 0 else { throw CollectionError.system(L10n.text("시작 디스크 장치를 찾을 수 없습니다.")) }
         let device = withUnsafePointer(to: &fs.f_mntfromname) { pointer in
             pointer.withMemoryRebound(to: CChar.self, capacity: Int(MNAMELEN)) { String(cString: $0) }
         }
-        guard device.hasPrefix("/dev/") else { throw CollectionError.system("시작 디스크 I/O를 지원하지 않습니다.") }
+        guard device.hasPrefix("/dev/") else { throw CollectionError.system(L10n.text("시작 디스크 I/O를 지원하지 않습니다.")) }
         let service = IOServiceGetMatchingService(kIOMainPortDefault, IOBSDNameMatching(kIOMainPortDefault, 0, String(device.dropFirst(5))))
-        guard service != 0 else { throw CollectionError.system("시작 디스크 I/O 장치를 찾을 수 없습니다.") }
+        guard service != 0 else { throw CollectionError.system(L10n.text("시작 디스크 I/O 장치를 찾을 수 없습니다.")) }
         defer { IOObjectRelease(service) }
         var iterator: io_iterator_t = 0
         guard IORegistryEntryCreateIterator(service, kIOServicePlane,
             IOOptionBits(kIORegistryIterateRecursively | kIORegistryIterateParents), &iterator) == KERN_SUCCESS else {
-            throw CollectionError.system("시작 디스크 I/O 통계를 읽을 수 없습니다.")
+            throw CollectionError.system(L10n.text("시작 디스크 I/O 통계를 읽을 수 없습니다."))
         }
         defer { IOObjectRelease(iterator) }
         var counters: [UInt64: DiskDeviceCounter] = [:]
@@ -110,11 +110,11 @@ extension SystemMetrics {
                   let stats = IORegistryEntryCreateCFProperty(parent, "Statistics" as CFString, nil, 0)?.takeRetainedValue() as? [String: Any],
                   let read = stats["Bytes (Read)"] as? NSNumber, let write = stats["Bytes (Write)"] as? NSNumber,
                   read.doubleValue >= 0, write.doubleValue >= 0 else {
-                throw CollectionError.system("시작 디스크 I/O 통계가 제공되지 않습니다.")
+                throw CollectionError.system(L10n.text("시작 디스크 I/O 통계가 제공되지 않습니다."))
             }
             counters[id] = DiskDeviceCounter(id: id, read: read.uint64Value, write: write.uint64Value)
         }
-        guard IOIteratorIsValid(iterator) != 0, !counters.isEmpty else { throw CollectionError.system("이 Mac에서 시작 디스크 I/O 통계를 제공하지 않습니다.") }
+        guard IOIteratorIsValid(iterator) != 0, !counters.isEmpty else { throw CollectionError.system(L10n.text("이 Mac에서 시작 디스크 I/O 통계를 제공하지 않습니다.")) }
         return DiskCounter(devices: counters.values.sorted { $0.id < $1.id }, uptime: ProcessInfo.processInfo.systemUptime)
     }
 }

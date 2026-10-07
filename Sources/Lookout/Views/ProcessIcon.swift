@@ -8,12 +8,13 @@ struct ProcessIcon: View {
     var body: some View {
         Group {
             if let image {
-                Image(nsImage: image).resizable().interpolation(.high)
+                Image(nsImage: image).resizable().interpolation(.high).scaledToFit()
             } else {
-                Image(systemName: "gearshape.fill").resizable().foregroundStyle(.secondary)
+                Image(systemName: "gearshape.fill").resizable().scaledToFit()
+                    .foregroundStyle(.secondary)
+                    .frame(width: ProcessIconCache.iconSize - 2, height: ProcessIconCache.iconSize - 2)
             }
         }
-        .scaledToFit()
         .frame(width: ProcessIconCache.iconSize, height: ProcessIconCache.iconSize)
         .accessibilityHidden(true)
         .task(id: id) { image = ProcessIconCache.shared.image(for: id) }

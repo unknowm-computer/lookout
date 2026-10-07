@@ -51,7 +51,7 @@ public enum SystemMetrics {
         let result = withUnsafeMutablePointer(to: &info) { ptr in
             ptr.withMemoryRebound(to: integer_t.self, capacity: capacity) { host_statistics(host, HOST_CPU_LOAD_INFO, $0, &count) }
         }
-        guard result == KERN_SUCCESS else { throw CollectionError.system("CPU 통계를 읽을 수 없습니다 (\(result)).") }
+        guard result == KERN_SUCCESS else { throw CollectionError.system(L10n.text("CPU 통계를 읽을 수 없습니다 (\(result)).")) }
         return CPUTicks(user: UInt64(info.cpu_ticks.0), system: UInt64(info.cpu_ticks.1),
                         idle: UInt64(info.cpu_ticks.2), nice: UInt64(info.cpu_ticks.3))
     }
@@ -60,14 +60,14 @@ public enum SystemMetrics {
         let host = mach_host_self()
         defer { mach_port_deallocate(mach_task_self_, host) }
         var pageSize: vm_size_t = 0
-        guard host_page_size(host, &pageSize) == KERN_SUCCESS else { throw CollectionError.system("메모리 페이지 크기를 읽을 수 없습니다.") }
+        guard host_page_size(host, &pageSize) == KERN_SUCCESS else { throw CollectionError.system(L10n.text("메모리 페이지 크기를 읽을 수 없습니다.")) }
         var info = vm_statistics64_data_t()
         var count = mach_msg_type_number_t(MemoryLayout<vm_statistics64_data_t>.size / MemoryLayout<integer_t>.size)
         let capacity = Int(count)
         let result = withUnsafeMutablePointer(to: &info) { ptr in
             ptr.withMemoryRebound(to: integer_t.self, capacity: capacity) { host_statistics64(host, HOST_VM_INFO64, $0, &count) }
         }
-        guard result == KERN_SUCCESS else { throw CollectionError.system("메모리 통계를 읽을 수 없습니다 (\(result)).") }
+        guard result == KERN_SUCCESS else { throw CollectionError.system(L10n.text("메모리 통계를 읽을 수 없습니다 (\(result)).")) }
         let page = Double(pageSize)
         // Anonymous resident pages exclude compressed storage. Reclaimable purgeable pages are not app memory.
         let app = max(0, Double(info.internal_page_count) - Double(info.purgeable_count)) * page
@@ -98,10 +98,10 @@ public enum SystemMetrics {
     public static func interfaces() throws -> [NetworkCounter] {
         var mib: [Int32] = [CTL_NET, PF_ROUTE, 0, 0, NET_RT_IFLIST2, 0]
         var size = 0
-        guard sysctl(&mib, UInt32(mib.count), nil, &size, nil, 0) == 0 else { throw CollectionError.system("네트워크 통계를 읽을 수 없습니다.") }
+        guard sysctl(&mib, UInt32(mib.count), nil, &size, nil, 0) == 0 else { throw CollectionError.system(L10n.text("네트워크 통계를 읽을 수 없습니다.")) }
         var data = Data(count: size)
         let result = data.withUnsafeMutableBytes { sysctl(&mib, UInt32(mib.count), $0.baseAddress, &size, nil, 0) }
-        guard result == 0 else { throw CollectionError.system("네트워크 통계를 읽을 수 없습니다.") }
+        guard result == 0 else { throw CollectionError.system(L10n.text("네트워크 통계를 읽을 수 없습니다.")) }
         let uptime = ProcessInfo.processInfo.systemUptime
         return data.withUnsafeBytes { buffer in
             var result: [NetworkCounter] = [], offset = 0
@@ -161,7 +161,7 @@ public actor MetricSampler {
                     let value = previousCPU.flatMap { current.usage(since: $0) }
                     previousCPU = current
                     return MetricReading(metric: metric, date: date, value: value.map(ReadingValue.cpu),
-                                         message: value == nil ? "다음 측정을 기다리는 중" : nil)
+                                         message: value == nil ? L10n.text("다음 측정을 기다리는 중") : nil)
                 case .memory:
                     return MetricReading(metric: metric, date: date, value: .memory(try SystemMetrics.memory()))
                 case .ssd:
@@ -179,12 +179,12 @@ public actor MetricSampler {
                     guard let counter = interfaces.first(where: { $0.name == name }) else {
                         previousNetwork = nil
                         return MetricReading(metric: metric, date: date, value: nil,
-                                             message: config.interface == nil ? "네트워크 연결 없음" : "선택한 인터페이스를 사용할 수 없습니다")
+                                             message: config.interface == nil ? L10n.text("네트워크 연결 없음") : L10n.text("선택한 인터페이스를 사용할 수 없습니다"))
                     }
                     let value = previousNetwork.flatMap { counter.rate(since: $0) }
                     previousNetwork = counter
                     return MetricReading(metric: metric, date: date, value: value.map(ReadingValue.network),
-                                         message: value == nil ? "\(counter.name) · 다음 측정을 기다리는 중" : nil)
+                                         message: value == nil ? L10n.text("\(counter.name) · 다음 측정을 기다리는 중") : nil)
                 }
             } catch {
                 if metric == .cpu { previousCPU = nil }

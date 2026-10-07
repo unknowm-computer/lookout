@@ -4,7 +4,7 @@ public enum MemoryPressure: UInt32, Sendable {
     // kern.memorystatus_vm_pressure_level returns dispatch flags, not the internal XNU enum.
     case normal = 1, warning = 2, critical = 4
     public var title: String {
-        switch self { case .normal: "정상"; case .warning: "주의"; case .critical: "부족" }
+        switch self { case .normal: L10n.text("정상"); case .warning: L10n.text("주의"); case .critical: L10n.text("부족") }
     }
 }
 
@@ -20,10 +20,10 @@ public enum CapacityMenuBarValue: String, CaseIterable, Codable, Sendable, Ident
     }
     public var title: String {
         switch self {
-        case .percentage: "사용률"
-        case .used: "사용 용량"
-        case .available: "남은 용량"
-        case .availablePercentage: "남은 비율"
+        case .percentage: L10n.text("사용률")
+        case .used: L10n.text("사용 용량")
+        case .available: L10n.text("남은 용량")
+        case .availablePercentage: L10n.text("남은 비율")
         }
     }
 }

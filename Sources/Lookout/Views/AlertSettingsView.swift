@@ -11,15 +11,15 @@ struct AlertSettingsView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(notifications.permissionDescription).font(.system(size: 11)).foregroundStyle(.secondary)
                     HStack {
-                        Button(notifications.authorization == .notDetermined ? "알림 허용…" : "권한 확인") {
+                        Button(notifications.authorization == .notDetermined ? L10n.text("알림 허용…") : L10n.text("권한 확인")) {
                             Task {
                                 if notifications.authorization == .notDetermined { await notifications.requestAuthorization() }
                                 else { await notifications.refreshAuthorization() }
                             }
                         }
-                        Button("테스트 알림") { Task { await notifications.test(sound: settings.alerts.sound) } }
+                        Button(L10n.text("테스트 알림")) { Task { await notifications.test(sound: settings.alerts.sound) } }
                         Spacer()
-                        Toggle("소리", isOn: Binding(get: { settings.alerts.sound }, set: { settings.setAlertSound($0) }))
+                        Toggle(L10n.text("소리"), isOn: Binding(get: { settings.alerts.sound }, set: { settings.setAlertSound($0) }))
                             .toggleStyle(.checkbox)
                     }.disabled(notifications.busy)
                     if let feedback = notifications.feedback {
@@ -29,7 +29,7 @@ struct AlertSettingsView: View {
                 ForEach(AlertConfiguration.supportedMetrics) { metric in
                     AlertRuleView(metric: metric, settings: settings, notifications: notifications)
                 }
-                Text("같은 문제는 한 번만 알립니다. 정상 범위가 10초 유지된 뒤 다시 발생하면 새 알림을 보냅니다. 측정 실패와 잠자기 시간은 제외합니다.")
+                Text(L10n.text("같은 문제는 한 번만 알립니다. 정상 범위가 10초 유지된 뒤 다시 발생하면 새 알림을 보냅니다. 측정 실패와 잠자기 시간은 제외합니다."))
                     .font(.system(size: 10)).foregroundStyle(.secondary)
             }.font(.system(size: 12)).padding(.trailing, 3)
         }
@@ -45,7 +45,7 @@ private struct AlertRuleView: View {
     private var supported: Bool { settings.capabilities.supports(metric) }
     private var monitored: Bool { settings.configuration.enabled.contains(metric) }
     private var title: String {
-        switch metric { case .ssd: "SSD 여유 공간"; default: "\(metric.title) 사용률" }
+        switch metric { case .ssd: L10n.text("SSD 여유 공간"); default: L10n.text("\(metric.title) 사용률") }
     }
     private var threshold: Binding<Double> {
         Binding(get: { rule.threshold }, set: { value in settings.updateAlert(metric) { $0.threshold = value } })
@@ -62,23 +62,23 @@ private struct AlertRuleView: View {
                 })).toggleStyle(.checkbox).disabled(!supported)
             }
             HStack(spacing: 5) {
-                Text("기준")
-                TextField("\(title) 기준", value: threshold, format: .number.precision(.fractionLength(0)))
+                Text(L10n.text("기준"))
+                TextField(L10n.text("\(title) 기준"), value: threshold, format: .number.precision(.fractionLength(0)))
                     .textFieldStyle(.roundedBorder).frame(width: 53).multilineTextAlignment(.trailing)
-                Stepper("\(title) 기준", value: threshold, in: rule.thresholdRange, step: 1)
+                Stepper(L10n.text("\(title) 기준"), value: threshold, in: rule.thresholdRange, step: 1)
                     .labelsHidden().fixedSize()
                 Text("\(rule.unit) \(rule.condition)")
                 Spacer(minLength: 4)
-                Picker("\(title) 지속 시간", selection: Binding(get: { rule.duration }, set: { value in
+                Picker(L10n.text("\(title) 지속 시간"), selection: Binding(get: { rule.duration }, set: { value in
                     settings.updateAlert(metric) { $0.duration = value }
                 })) {
                     ForEach(durations, id: \.self) { duration in
-                        Text(duration == 0 ? "즉시" : "\(Int(duration))초 유지").tag(duration)
+                        Text(duration == 0 ? L10n.text("즉시") : L10n.text("\(Int(duration))초 유지")).tag(duration)
                     }
                 }.labelsHidden().frame(width: 105)
             }.disabled(!supported || !rule.enabled)
             Text(settings.capabilities.unsupportedReason(for: metric) ??
-                 (monitored ? rule.recoveryDescription : "모니터링 꺼짐 · 알림 판단 일시 중지"))
+                 (monitored ? rule.recoveryDescription : L10n.text("모니터링 꺼짐 · 알림 판단 일시 중지")))
                 .font(.system(size: 10)).foregroundStyle(.secondary)
         }.padding(11).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
     }

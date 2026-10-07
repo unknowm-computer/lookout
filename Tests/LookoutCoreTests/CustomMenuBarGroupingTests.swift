@@ -35,8 +35,8 @@ import Testing
 @Test func arbitraryGroupsKeepPlacementPriorityAndDisabledMembersIndependent() {
     let groups = MenuBarGrouping(pairs: [MenuBarPair(.cpu, .memory), MenuBarPair(.gpu, .power)])
     let config = MonitorConfiguration(order: [.network, .memory, .ssd, .power, .disk, .cpu, .gpu], menuBarGrouping: groups)
-    #expect(groups.units(metrics: config.visible) == [.metric(.network), .pair(.cpu, .memory),
-        .metric(.ssd), .pair(.gpu, .power), .metric(.disk)])
+    #expect(groups.units(metrics: config.visible) == [.metric(.network), .metric(.ssd), .metric(.disk),
+        .pair(.cpu, .memory), .pair(.gpu, .power)])
     #expect(MenuBarDensity.minimal.metrics(configuration: config, priority: [.power]) == [.power, .gpu])
     #expect(groups.units(metrics: [.ssd, .memory, .gpu]) == [.metric(.ssd), .metric(.memory), .metric(.gpu)])
     #expect(groups.pairs.count == 2)

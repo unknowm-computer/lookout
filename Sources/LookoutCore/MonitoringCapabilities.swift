@@ -21,7 +21,7 @@ public struct MonitoringCapabilities: Sendable {
         }
     }
     public func unsupportedReason(for metric: Metric) -> String? {
-        supports(metric) ? nil : "Intel Mac에서는 \(metric.title) 모니터링을 지원하지 않습니다."
+        supports(metric) ? nil : L10n.text("Intel Mac에서는 \(metric.title) 모니터링을 지원하지 않습니다.")
     }
     public func applying(to configuration: MonitorConfiguration) -> MonitorConfiguration {
         var result = configuration

@@ -5,6 +5,8 @@ import UserNotifications
 
 @main struct LookoutEntryPoint {
     @MainActor static func main() async {
+        // Freeze the language before settings can be edited during this launch.
+        _ = L10n.language
         if CommandLine.arguments.contains("--notification-status") {
             let center = UNUserNotificationCenter.current()
             let status = await center.notificationSettings()
@@ -55,10 +57,10 @@ import UserNotifications
         .windowResizability(.contentSize)
         .defaultLaunchBehavior(CommandLine.arguments.contains("--panel") ? .presented : .suppressed)
         .commands {
-            CommandMenu("모니터링") {
-                Button("메뉴바 패널 열기") { services.menuBar.showPanel() }
+            CommandMenu(L10n.text("모니터링")) {
+                Button(L10n.text("메뉴바 패널 열기")) { services.menuBar.showPanel() }
                     .keyboardShortcut("m", modifiers: [.command, .shift])
-                Button("설정…") { services.menuBar.showSettings() }
+                Button(L10n.text("설정…")) { services.menuBar.showSettings() }
                     .keyboardShortcut(",", modifiers: .command)
             }
         }

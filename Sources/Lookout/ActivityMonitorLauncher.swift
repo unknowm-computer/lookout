@@ -1,3 +1,4 @@
+import LookoutCore
 import AppKit
 
 @MainActor enum ActivityMonitorLauncher {
@@ -12,6 +13,6 @@ import AppKit
     }
     private enum LaunchError: LocalizedError {
         case notFound
-        var errorDescription: String? { "활성 상태 보기 앱을 찾을 수 없습니다." }
+        var errorDescription: String? { L10n.text("활성 상태 보기 앱을 찾을 수 없습니다.") }
     }
 }

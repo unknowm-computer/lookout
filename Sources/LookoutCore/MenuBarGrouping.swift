@@ -3,7 +3,7 @@ import Foundation
 public enum StoragePollingInterval: Int, CaseIterable, Sendable, Identifiable {
     case thirtySeconds = 30, oneMinute = 60, fiveMinutes = 300, tenMinutes = 600, thirtyMinutes = 1800
     public var id: Int { rawValue }
-    public var title: String { rawValue < 60 ? "\(rawValue)초" : "\(rawValue / 60)분" }
+    public var title: String { rawValue < 60 ? L10n.text("\(rawValue)초") : L10n.text("\(rawValue / 60)분") }
 }
 
 /// A paired unit is one status item and one priority/space-budget unit.
@@ -93,13 +93,16 @@ public struct MenuBarGrouping: Codable, Equatable, Sendable {
         try container.encode(cpuGPU, forKey: .cpuGPU)
         try container.encode(memorySSD, forKey: .memorySSD)
     }
-    /// Place pairs at their first member's position; one disabled member leaves a normal single item.
+    /// Place pairs at the upper member's position; one disabled member leaves a normal single item.
     public func units(metrics: [Metric]) -> [MenuBarUnit] {
         let present = Set(metrics)
         var emitted: Set<MenuBarUnit> = []
         return metrics.compactMap { metric in
             let unit: MenuBarUnit
-            if let pair = pair(containing: metric), present.isSuperset(of: pair.metrics) { unit = pair.unit }
+            if let pair = pair(containing: metric), present.isSuperset(of: pair.metrics) {
+                guard metric == pair.upper else { return nil }
+                unit = pair.unit
+            }
             else { unit = .metric(metric) }
             return emitted.insert(unit).inserted ? unit : nil
         }

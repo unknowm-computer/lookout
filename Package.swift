@@ -3,11 +3,12 @@ import PackageDescription
 
 let package = Package(
     name: "Lookout",
+    defaultLocalization: "en",
     platforms: [.macOS(.v15)],
     products: [.executable(name: "Lookout", targets: ["Lookout"])],
     dependencies: [.package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.0")],
     targets: [
-        .target(name: "LookoutCore"),
+        .target(name: "LookoutCore", resources: [.process("Resources")]),
         .executableTarget(name: "Lookout", dependencies: ["LookoutCore", .product(name: "Sparkle", package: "Sparkle")],
                           linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]),
         .testTarget(name: "LookoutCoreTests", dependencies: ["LookoutCore"]),

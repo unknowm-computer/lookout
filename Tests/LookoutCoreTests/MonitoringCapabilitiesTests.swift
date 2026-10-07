@@ -34,7 +34,7 @@ import Testing
     #expect(!MonitoringCapabilities.current.supports(.power))
     #endif
     let intel = MonitoringCapabilities(supportsGPU: false, supportsProcessEnergy: false)
-    #expect(intel.unsupportedReason(for: .gpu) == "Intel Mac에서는 GPU 모니터링을 지원하지 않습니다.")
-    #expect(intel.unsupportedReason(for: .power) == "Intel Mac에서는 에너지 모니터링을 지원하지 않습니다.")
+    #expect(intel.unsupportedReason(for: .gpu) == L10n.text("Intel Mac에서는 \(Metric.gpu.title) 모니터링을 지원하지 않습니다."))
+    #expect(intel.unsupportedReason(for: .power) == L10n.text("Intel Mac에서는 \(Metric.power.title) 모니터링을 지원하지 않습니다."))
     #expect(intel.unsupportedReason(for: .cpu) == nil)
 }

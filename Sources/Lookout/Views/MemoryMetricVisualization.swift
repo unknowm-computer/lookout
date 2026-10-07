@@ -7,7 +7,14 @@ struct MemoryMetricVisualization: View {
     let end: Date
     let style: ChartStyle
     let showsSwapDetails: Bool
-    @State private var historyExpanded = true
+    let initiallyExpanded: Bool
+    @State private var historyExpanded: Bool
+    init(reading: MetricReading?, history: [HistoryPoint], end: Date, style: ChartStyle,
+         showsSwapDetails: Bool, initiallyExpanded: Bool = true) {
+        self.reading = reading; self.history = history; self.end = end; self.style = style
+        self.showsSwapDetails = showsSwapDetails; self.initiallyExpanded = initiallyExpanded
+        _historyExpanded = State(initialValue: initiallyExpanded)
+    }
     private var memory: MemoryReading? {
         if case .memory(let memory) = reading?.value { return memory }
         return nil
@@ -23,11 +30,11 @@ struct MemoryMetricVisualization: View {
             } else {
                 MemoryCurrentBar(memory: memory)
                 if let memory { MemoryUsageDetails(memory: memory, showsSwapDetails: showsSwapDetails) }
-                DisclosureGroup("최근 5분 기록", isExpanded: $historyExpanded) {
+                DisclosureGroup(L10n.text("최근 5분 기록"), isExpanded: $historyExpanded) {
                     historyChart.padding(.top, 5)
                 }.font(.system(size: 10)).tint(.secondary)
             }
-        }
+        }.onChange(of: initiallyExpanded) { _, value in historyExpanded = value }
     }
     private var historyChart: some View {
         MetricChart(metric: .memory, history: history, end: end, color: .purple).frame(height: 66)
@@ -39,10 +46,10 @@ private enum MemoryComponent: CaseIterable, Identifiable {
     var id: Self { self }
     var title: String {
         switch self {
-        case .app: "앱"
+        case .app: L10n.text("앱")
         case .wired: "Wired"
-        case .compressed: "압축"
-        case .free: "여유"
+        case .compressed: L10n.text("압축")
+        case .free: L10n.text("여유")
         }
     }
     var color: Color {
@@ -79,7 +86,7 @@ private enum MemoryComponent: CaseIterable, Identifiable {
 private struct MemoryCurrentBar: View {
     let memory: MemoryReading?
     var body: some View {
-        SegmentedUsageBar(segments: memoryCompositionSegments(memory), accessibilityTitle: "메모리 현재 상태 막대")
+        SegmentedUsageBar(segments: memoryCompositionSegments(memory), accessibilityTitle: L10n.text("메모리 현재 상태 막대"))
     }
 }
 
@@ -122,13 +129,13 @@ private struct SwapUsageBar: View {
         guard let percent = memory.swapPercent, let used = memory.swap,
               let available = memory.swapAvailable, let total = memory.swapTotal else { return [] }
         if total == 0 {
-            return [UsageBarSegment(id: "unallocated", title: "Swap 할당 없음", fraction: 1, color: freeColor,
-                                    summary: "현재 할당된 스왑 공간 없음 · 필요 시 macOS가 자동 할당")]
+            return [UsageBarSegment(id: "unallocated", title: L10n.text("Swap 할당 없음"), fraction: 1, color: freeColor,
+                                    summary: L10n.text("현재 할당된 스왑 공간 없음 · 필요 시 macOS가 자동 할당"))]
         }
-        return [UsageBarSegment(id: "used", title: "Swap 사용", fraction: percent / 100, color: usedColor,
-                                summary: "Swap 사용 · \(ValueFormat.memory(used)) · 현재 할당량의 \(ValueFormat.percent(percent))"),
-                UsageBarSegment(id: "free", title: "Swap 할당 여유", fraction: 1 - percent / 100, color: freeColor,
-                                summary: "Swap 할당 여유 · \(ValueFormat.memory(available)) · 현재 할당량의 \(ValueFormat.percent(100 - percent))")]
+        return [UsageBarSegment(id: "used", title: L10n.text("Swap 사용"), fraction: percent / 100, color: usedColor,
+                                summary: L10n.text("Swap 사용 · \(ValueFormat.memory(used)) · 현재 할당량의 \(ValueFormat.percent(percent))")),
+                UsageBarSegment(id: "free", title: L10n.text("Swap 할당 여유"), fraction: 1 - percent / 100, color: freeColor,
+                                summary: L10n.text("Swap 할당 여유 · \(ValueFormat.memory(available)) · 현재 할당량의 \(ValueFormat.percent(100 - percent))"))]
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -143,15 +150,15 @@ private struct SwapUsageBar: View {
                 Text("\(memory.swap.map(ValueFormat.memory) ?? "—") / \(memory.swapTotal.map(ValueFormat.memory) ?? "—")")
                     .monospacedDigit()
             }
-            .help("사용량 / 현재 할당량입니다. macOS가 필요에 따라 자동으로 확장하며, 고정된 최대 용량은 아닙니다. RAM 구성 막대에는 포함되지 않습니다.")
+            .help(L10n.text("사용량 / 현재 할당량입니다. macOS가 필요에 따라 자동으로 확장하며, 고정된 최대 용량은 아닙니다. RAM 구성 막대에는 포함되지 않습니다."))
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Swap 사용량 / 현재 할당량")
-            .accessibilityValue("\(memory.swap.map(ValueFormat.memory) ?? "측정값 없음") / \(memory.swapTotal.map(ValueFormat.memory) ?? "측정값 없음")")
+            .accessibilityLabel(L10n.text("Swap 사용량 / 현재 할당량"))
+            .accessibilityValue("\(memory.swap.map(ValueFormat.memory) ?? L10n.text("측정값 없음")) / \(memory.swapTotal.map(ValueFormat.memory) ?? L10n.text("측정값 없음"))")
             if showsDetails {
-                SegmentedUsageBar(segments: segments, accessibilityTitle: "Swap 현재 할당량 대비 사용 막대")
+                SegmentedUsageBar(segments: segments, accessibilityTitle: L10n.text("Swap 현재 할당량 대비 사용 막대"))
                 HStack(spacing: 16) {
-                    amount("사용", memory.swap, color: usedColor)
-                    amount("할당 여유", memory.swapAvailable, color: freeColor)
+                    amount(L10n.text("사용"), memory.swap, color: usedColor)
+                    amount(L10n.text("할당 여유"), memory.swapAvailable, color: freeColor)
                 }
             }
         }
