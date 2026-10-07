@@ -29,9 +29,10 @@ struct MetricReorderRow<Content: View>: View {
                             in: RoundedRectangle(cornerRadius: 5))
                 .contentShape(Rectangle())
                 .onHover { isHovered = $0 }
-                .focusable()
+                // Focus is only needed while dragging so Esc can cancel the gesture.
+                .focusable(dragging)
                 .focused($handleFocused)
-                .focusEffectDisabled(dragging)
+                .focusEffectDisabled()
                 .gesture(DragGesture(minimumDistance: 4, coordinateSpace: .named(scope))
                     .updating($dragging) { _, active, _ in active = true }
                     .onChanged { value in
@@ -45,7 +46,8 @@ struct MetricReorderRow<Content: View>: View {
                         handleFocused = false
                     })
                 .onChange(of: dragging) { _, active in
-                    if !active { dragCancelled(); cancelled = false; handleFocused = false }
+                    if active { handleFocused = true }
+                    else { dragCancelled(); cancelled = false; handleFocused = false }
                 }
                 .onKeyPress(.escape) {
                     guard dragging else { return .ignored }

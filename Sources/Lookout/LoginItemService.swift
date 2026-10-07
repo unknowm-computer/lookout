@@ -20,7 +20,10 @@ import ServiceManagement
         @unknown default: L10n.text("자동 실행 상태를 확인할 수 없습니다.")
         }
     }
-    func refresh() { status = service.status }
+    func refresh() {
+        let latest = service.status
+        if latest != status { status = latest }
+    }
     func setEnabled(_ enabled: Bool) async {
         guard !isChanging else { return }
         refresh()

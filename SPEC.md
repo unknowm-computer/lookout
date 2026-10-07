@@ -113,7 +113,7 @@ Lookout은 ‘활성 상태 보기’에서 확인하는 시스템 상태와 프
 - 미리보기는 목록의 임시 상태다. 드롭 후 행이 빈 자리에 안착하면 실제 설정을 한 번 반영한다. 이동 중에는 메뉴바·저장 설정을 변경하지 않는다. 시스템의 동작 줄이기 설정에서는 애니메이션과 안착 대기를 생략한다.
 - 여러 행을 건너뛰면 중간 항목을 밀어 이동한다. Esc·목록 밖 드롭·동일 위치·화면 이탈은 설정을 저장하지 않으며 다른 목록으로 드래그 이동하지 않는다. 우클릭 메뉴와 접근성 위/아래 이동도 제공한다.
 - 설정 창·업데이트 팝업의 버튼은 상세 하단과 같은 hover 스타일을 사용한다. 간격의 `적용`은 accent 기본색을 유지하며 hover·눌림 시 어두워진다.
-- 설정 탭·메뉴바 표시 방식·표시 범위는 공통 `HoverSegmentedPicker`로 각 버튼의 hover·눌림·선택·포커스를 표시하고 좌우 화살표 이동을 지원한다. 이미 선택된 항목은 hover·눌림 강조를 추가하지 않는다. 체크박스와 드롭다운 Picker는 기존 네이티브 스타일을 유지한다. Liquid Glass는 현재 적용하지 않는다.
+- 설정 탭·메뉴바 표시 방식·표시 범위는 공통 `HoverSegmentedPicker`로 각 버튼의 hover·눌림·선택을 표시한다. 초기 포커스 강제 지정·복원, 별도 방향키 처리와 파란 포커스 테두리는 사용하지 않는다. 이미 선택된 항목은 hover·눌림 강조를 추가하지 않는다. 기본 버튼 동작과 접근성 레이블은 유지하며, 드래그 핸들은 드래그 중 `Esc` 취소를 위해서만 포커스를 받는다. 체크박스와 드롭다운 Picker는 기존 네이티브 스타일을 유지한다. Liquid Glass는 현재 적용하지 않는다.
 
 ## 4. 그래프와 프로세스 목록
 
@@ -170,7 +170,7 @@ Lookout은 ‘활성 상태 보기’에서 확인하는 시스템 상태와 프
 - 자동 실행 체크박스와 `로그인 항목 열기` 버튼은 같은 줄의 좌우에 배치하고 상태·안내·오류 문구는 아래에서 전체 너비를 사용한다.
 - `SMAppService.mainApp.register()`와 비동기 `unregister()`로 현재 사용자의 로그인 항목을 등록·해제한다. 별도 root 서비스나 LaunchDaemon을 설치하지 않는다.
 - 저장된 Boolean 대신 macOS의 `status`를 기준으로 체크박스·안내를 표시한다. 승인 대기는 등록됨·미허용 상태로 안내하고, 시스템 설정 버튼을 제공한다.
-- 설정 화면 표시·앱 활성화와 설정 표시 중 2초 주기로 상태를 갱신하여 외부 변경을 반영한다. 변경 중에는 중복 조작을 막고 실패 시 실제 상태와 오류를 표시한다.
+- 설정의 로그인 항목 영역 표시·설정 창 재열기/활성화와 앱 내 등록·해제 전후에만 실제 상태를 확인한다. 시스템 설정에서 변경 후 설정 창으로 돌아오면 갱신하며 주기적인 타이머 조회는 하지 않는다. 동일한 상태는 다시 발행하지 않는다. 변경 중에는 중복 조작을 막고 실패 시 실제 상태와 오류를 표시한다.
 - `/Applications`에 설치한 앱에서 설정하도록 안내한다. 재부팅 후 사용자 로그인 때 메뉴바에서 실행하며, 로그인 전 시스템 서비스와 구분한다.
 
 ## 6. 알림
@@ -247,7 +247,7 @@ Lookout은 ‘활성 상태 보기’에서 확인하는 시스템 상태와 프
 | `Sources/Lookout/NotificationService.swift / UpdateService.swift` | 시스템 알림·Sparkle 연결 |
 | `Sources/Lookout/Views/` | 패널·설정·그래프·프로세스 UI |
 | `Sources/Lookout/Views/MetricReorderList.swift / MetricReorderRow.swift` | 두 설정 목록의 임시 정렬·드래그 미리보기·취소·접근성 이동 |
-| `Sources/Lookout/Views/HoverSegmentedPicker.swift / PanelActionButtonStyle.swift` | 선택·hover·포커스 스타일 |
+| `Sources/Lookout/Views/HoverSegmentedPicker.swift / PanelActionButtonStyle.swift` | 선택·hover·버튼 스타일 |
 | `Tests/LookoutCoreTests/` | UI와 분리된 계산·상태 테스트 |
 | `scripts/ / Resources/` | 빌드·테스트·아이콘 생성·번들 설정·라이선스 |
 

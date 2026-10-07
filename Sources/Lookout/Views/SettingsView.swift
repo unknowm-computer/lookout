@@ -29,7 +29,6 @@ struct SettingsView: View {
                 ScrollView { monitoring.padding(.trailing, 3) }
             } else if tab == 1 { MenuBarSettingsView(settings: settings, menuBar: menuBar) }
             else { AlertSettingsView(settings: settings, notifications: monitor.notifications) }
-            Spacer(minLength: 0)
             Divider()
             HStack {
                 Text(L10n.text("Lookout \(updates.version) · macOS Sequoia 15 이상"))

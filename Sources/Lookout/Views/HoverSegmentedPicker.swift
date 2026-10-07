@@ -11,18 +11,11 @@ struct HoverSegmentedPicker<Value: Hashable>: View {
     let title: String
     @Binding var selection: Value
     let options: [SegmentOption<Value>]
-    @FocusState private var focusedOption: Value?
-    @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
         HStack(spacing: 2) {
             ForEach(options, id: \.value) { option in
-                Button { selection = option.value } label: {
-                    Text(option.title).frame(maxWidth: .infinity)
-                }
-                .buttonStyle(SegmentButtonStyle(selected: selection == option.value))
-                .focused($focusedOption, equals: option.value)
-                .accessibilityAddTraits(selection == option.value ? [.isSelected] : [])
+                segmentButton(option)
             }
         }
         .padding(2)
@@ -32,18 +25,14 @@ struct HoverSegmentedPicker<Value: Hashable>: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(title)
-        .onMoveCommand { direction in
-            guard isEnabled, let index = options.firstIndex(where: { $0.value == selection }) else { return }
-            let offset: Int
-            switch direction {
-            case .left: offset = -1
-            case .right: offset = 1
-            default: return
-            }
-            guard options.indices.contains(index + offset) else { return }
-            selection = options[index + offset].value
-            focusedOption = selection
+    }
+
+    private func segmentButton(_ option: SegmentOption<Value>) -> some View {
+        Button { selection = option.value } label: {
+            Text(option.title).frame(maxWidth: .infinity)
         }
+        .buttonStyle(SegmentButtonStyle(selected: selection == option.value))
+        .accessibilityAddTraits(selection == option.value ? [.isSelected] : [])
     }
 }
 
@@ -58,7 +47,6 @@ private struct SegmentButtonBody: View {
     let configuration: ButtonStyleConfiguration
     let selected: Bool
     @Environment(\.isEnabled) private var isEnabled
-    @Environment(\.isFocused) private var isFocused
     @Environment(\.colorScheme) private var colorScheme
     @State private var hovered = false
 
@@ -81,8 +69,7 @@ private struct SegmentButtonBody: View {
             }
             .overlay {
                 RoundedRectangle(cornerRadius: 5)
-                    .strokeBorder(isFocused ? Color.accentColor : Color.primary.opacity(selected ? 0.12 : 0),
-                                  lineWidth: isFocused ? 2 : 0.5)
+                    .strokeBorder(Color.primary.opacity(selected ? 0.12 : 0), lineWidth: 0.5)
             }
             .opacity(isEnabled ? 1 : 0.55)
             .contentShape(RoundedRectangle(cornerRadius: 5))

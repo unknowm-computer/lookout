@@ -1,9 +1,9 @@
 import LookoutCore
-import AppKit
 import SwiftUI
 
 struct LoginItemSettingsView: View {
     @StateObject private var service = LoginItemService()
+    @Environment(\.appearsActive) private var appearsActive
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
             HStack {
@@ -28,12 +28,9 @@ struct LoginItemSettingsView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .onAppear { service.refresh() }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            service.refresh()
-        }
-        // System Settings may finish applying a change after the activation notification.
-        .onReceive(Timer.publish(every: 2, on: .main, in: .common).autoconnect()) { _ in
-            service.refresh()
+        // Refresh when this settings window is reopened or becomes active after System Settings.
+        .onChange(of: appearsActive) { _, active in
+            if active { service.refresh() }
         }
     }
 }

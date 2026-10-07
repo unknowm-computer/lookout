@@ -235,9 +235,9 @@ private struct PairingToken<Label: View, MenuContent: View>: View {
     var body: some View {
         label()
             .background(Color.primary.opacity(hovered && supported ? 0.08 : 0), in: RoundedRectangle(cornerRadius: 5))
-            .overlay { RoundedRectangle(cornerRadius: 5).strokeBorder(focused && !dragging ? Color.accentColor : .clear) }
             .contentShape(Rectangle()).onHover { hovered = $0 }
-            .focusable(supported).focused($focused).focusEffectDisabled()
+            // Do not make idle drag targets part of the window's keyboard focus order.
+            .focusable(supported && dragging).focused($focused).focusEffectDisabled()
             .gesture(DragGesture(minimumDistance: 4, coordinateSpace: .named("menu-bar-pairing"))
                 .updating($dragging) { _, active, _ in if supported { active = true } }
                 .onChanged { value in
@@ -249,7 +249,8 @@ private struct PairingToken<Label: View, MenuContent: View>: View {
                     wasCancelled = false; focused = false
                 })
             .onChange(of: dragging) { _, active in
-                if !active { cancelled(); wasCancelled = false; focused = false }
+                if active { focused = true }
+                else { cancelled(); wasCancelled = false; focused = false }
             }
             .onKeyPress(.escape) {
                 guard dragging else { return .ignored }
