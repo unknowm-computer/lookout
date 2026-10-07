@@ -19,11 +19,12 @@
 
 ## 2. 확인된 빌드·계산 결과
 
-### 2026-10-07 0.6.2 배포 준비
+### 2026-10-07 0.6.2 Release 게시
 
 - 버전을 `0.6.2`, build를 `8`로 올렸다. 영어·수동 언어 선택과 재시작 확인, 기본 갱신 3초, 잠자기 방지 전체 목록, 설정 배치·공통 I/O 게이지·그룹 상세 순서 수정을 포함한다.
 - Swift 테스트 115개(코어 90개·앱 25개), 업데이트 배포 테스트 9개, 설치 도구 테스트 8개가 통과했다. Universal 앱의 두 아키텍처·엄격한 중첩 서명·DMG 체크섬을 확인했다. 기존 키체인의 서명 키로 업데이트 ZIP을 서명하고 검증했으며 appcast의 버전·build·ZIP URL·크기와 배포 파일의 SHA-256을 확인했다.
-- 배포 파일은 `build/releases/v0.6.2-build8/`의 DMG·업데이트 ZIP·`appcast.xml`·`SHA256SUMS.txt`다. 게시 후 공개 다운로드·피드 확인은 별도로 기록한다. 언어 재시작 직후 화면의 검증 도구 연결 제약 등 기존 미검증 사항은 유지한다.
+- 소스 커밋 `c4d1838`을 `main`에 푸시하고 같은 커밋의 `v0.6.2` 태그로 [최신 Release](https://github.com/unknowm-computer/lookout/releases/tag/v0.6.2)를 게시했다. `build/releases/v0.6.2-build8/`의 DMG·업데이트 ZIP·`appcast.xml`·`SHA256SUMS.txt` 네 파일을 업로드했다.
+- 비로그인 공개 요청으로 네 파일의 HTTP 200·로컬 파일과의 바이트 일치·SHA-256을 확인했다. 최신 Release 피드가 `0.6.2` / build `8` / 최소 OS `15.0`과 올바른 ZIP 주소·크기를 제공하며, 공개 다운로드한 ZIP의 Ed25519 서명 검증이 통과했다. 결과는 `.build/release-0.6.2-public/verification.json`, 게시 화면은 `.build/release-0.6.2-published.jpg`에 기록했다. 0.6.2의 실제 업데이트 설치·재실행과 언어 재시작 직후 화면의 검증 도구 연결 제약 등 기존 미검증 사항은 유지한다.
 
 ### 2026-10-07 언어 재시작 확인과 기본 갱신 주기
 
@@ -156,7 +157,7 @@
 
 | 검사 | 결과 |
 | --- | --- |
-| Swift 자동 테스트 (`scripts/test.sh`) | 104개 통과: 코어 84개·앱 20개 |
+| Swift 자동 테스트 (`scripts/test.sh`) | 115개 통과: 코어 90개·앱 25개 |
 | 업데이트 배포 테스트 (`scripts/test-updates.py`) | 기본 GitHub 설정·환경 변수 덮어쓰기·비활성 설정·앱/appcast 계약 등 9개 통과 |
 | 개인용 설치 테스트 (`scripts/test-installer.py`) | 실제 서명 앱의 새 설치·교체·실패 복구·대상 앱만 종료 등 8개 통과 |
 | `bash scripts/build.sh` | Universal 릴리스 빌드 성공 |
@@ -165,8 +166,8 @@
 | `plutil -lint` | 번들 `Info.plist` 형식 정상 |
 | `codesign --verify --deep --strict` | 중첩 번들을 포함한 서명 검증 통과 |
 | 앱 `--probe` | 세 번 수집·정상 종료, CPU·메모리·SSD·네트워크·디스크·GPU·추정 에너지 확인 |
-| `scripts/create-dmg.sh` | Intel 제한·설치 도우미·기본 GitHub 업데이트 설정을 포함한 `Lookout-0.6.1.dmg` 생성·서명·이미지 체크섬 검증 통과 |
-| `scripts/prepare-release.py` | `v0.6.1-build7` ZIP·DMG·appcast·SHA-256 목록 생성, ZIP 서명 검증 및 Sparkle 파서·버전 비교 통과 |
+| `scripts/create-dmg.sh` | Intel 제한·설치 도우미·기본 GitHub 업데이트 설정을 포함한 `Lookout-0.6.2.dmg` 생성·서명·이미지 체크섬 검증 통과 |
+| `scripts/prepare-release.py` | `v0.6.2-build8` ZIP·DMG·appcast·SHA-256 목록 생성·ZIP 서명 검증 통과. Sparkle 파서·버전 비교는 기존 검증과 배포 계약 테스트로 확인 |
 
 첫 차분은 측정 대기이고 이후 CPU·네트워크·디스크·에너지 값이 갱신됐다. GPU의 유효한 0%와 이후 사용률도 수집됐다. probe는 설정·메뉴바 간격·알림 발송을 변경하지 않는다.
 
@@ -228,8 +229,8 @@
 
 ### 현재 설치·업데이트 상태
 
-- 현재 소스와 생성 앱은 버전 `0.6.1`, build `7`, 최소 OS `15.0`이다. 소스 plist에 직접 키를 넣지 않고 `Resources/UpdateConfiguration.json`의 GitHub 피드·공개 키를 빌드 시 생성 앱에 주입한다.
-- 기본 빌드의 업데이트 구성이 활성화됐으며 자동 확인은 기본 꺼짐이다. 0.6.1 최신 Release의 공개 피드와 배포 파일 다운로드를 확인했다. 설정이 없던 기존 앱에는 이번 DMG를 한 번 수동 설치해야 한다. 피드를 포함한 0.6.0 복사본의 실제 다운로드·교체·재실행은 Apple Silicon·macOS 27에서 확인했으며 다른 기기·OS 조합은 별도 검증한다.
+- 현재 소스와 생성 앱은 버전 `0.6.2`, build `8`, 최소 OS `15.0`이다. 소스 plist에 직접 키를 넣지 않고 `Resources/UpdateConfiguration.json`의 GitHub 피드·공개 키를 빌드 시 생성 앱에 주입한다.
+- 기본 빌드의 업데이트 구성이 활성화됐으며 자동 확인은 기본 꺼짐이다. 0.6.2 최신 Release의 공개 피드·배포 파일 다운로드·서명을 확인했다. 설정이 없던 기존 앱에는 이번 DMG를 한 번 수동 설치해야 한다. 피드를 포함한 0.6.0 복사본의 실제 0.6.1 다운로드·교체·재실행은 Apple Silicon·macOS 27에서 확인했다. 0.6.2 설치·재실행과 다른 기기·OS 조합은 별도 검증한다.
 
 ### 현재 화면 기준 자동 표시
 
@@ -253,7 +254,7 @@
 - 현재 일곱 항목·프로세스 수집을 포함한 장시간 CPU·RSS와 주기/패널 상태별 비용
 - 실제 알림 클릭·소리·집중 모드·권한 변경·잠자기 경계의 시스템 발송
 - 전역 간격의 실제 적용·복원·로그아웃 후 반영 및 외부 간격 도구와의 충돌
-- GitHub Release 게시 후 실제 Lookout 업데이트 파일의 다운로드·온라인 서명 검증·설치·재실행. Developer ID 서명·공증은 일반 배포로 확대할 경우 별도 준비
+- 0.6.2의 Sparkle UI를 통한 실제 업데이트 설치·재실행. 공개 파일 다운로드·서명 검증은 완료했으며, Developer ID 서명·공증은 일반 배포로 확대할 경우 별도 준비
 
 Intel 실행에서는 GPU·에너지 선택을 비활성화하고 수집·메뉴바·상세에서 제외하며 GPU 알림도 비활성화한다. Apple Silicon GPU 통계는 기기·드라이버 의존적이며 미지원 값을 0으로 만들지 않는다. 현재 앱의 성능 보장 수치는 없으며 초기 버전의 일시적인 CPU·RSS 관찰값을 현재 앱의 벤치마크로 사용하지 않는다.
 
