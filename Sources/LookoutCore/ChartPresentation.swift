@@ -78,8 +78,8 @@ public enum ChartData {
             (values.isEmpty ? nil : values.reduce(0, +) / Double(values.count))
         return UsageStatistics(average: average, maximum: values.max())
     }
-    public static func rateUpperBound(history: [HistoryPoint], current: ReadingValue? = nil) -> Double {
-        var maximum = 1000.0
+    public static func rateUpperBound(history: [HistoryPoint], current: ReadingValue? = nil, minimum: Double = 1000) -> Double {
+        var maximum = minimum.isFinite && minimum > 0 ? minimum : 1000
         for point in history {
             for value in [point.primary, point.secondary].compactMap({ $0 }) where value.isFinite {
                 maximum = max(maximum, value)

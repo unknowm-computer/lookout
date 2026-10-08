@@ -3,6 +3,7 @@ import SwiftUI
 
 /// Both I/O metrics share current-speed gauges and an optional history chart.
 struct RateGaugeHistory: View {
+    @Environment(\.activityRateBasis) private var rateBasis
     let metric: Metric
     let reading: MetricReading?
     let history: [HistoryPoint]
@@ -24,13 +25,13 @@ struct RateGaugeHistory: View {
         default: (nil, nil)
         }
     }
-    private var upper: Double { ChartData.rateUpperBound(history: history, current: reading?.value) }
+    private var upper: Double { ChartData.rateUpperBound(history: history, current: reading?.value, minimum: rateBasis == .data ? 1000 : 1) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             row(metric == .network ? L10n.text("다운로드") : L10n.text("읽기"), rates.first, color)
             row(metric == .network ? L10n.text("업로드") : L10n.text("쓰기"), rates.second, .orange)
-            Text(L10n.text("눈금 자동 · 최대 \(ValueFormat.rate(upper))"))
+            Text(L10n.text("눈금 자동 · 최대 \(rateBasis.format(upper, for: metric))"))
                 .font(.system(size: 9)).foregroundStyle(.secondary)
                 .help(L10n.text("현재 속도를 자동 눈금으로 표시합니다. 최대 처리 용량 대비 사용률이 아닙니다."))
             DisclosureGroup(L10n.text("최근 5분 기록"), isExpanded: $historyExpanded) {
@@ -47,7 +48,7 @@ struct RateGaugeHistory: View {
                 Circle().fill(tint).frame(width: 5, height: 5)
                 Text(label).foregroundStyle(.secondary)
                 Spacer(minLength: 0)
-                Text(validValue.map(ValueFormat.rate) ?? "—").monospacedDigit().fontWeight(.medium)
+                Text(validValue.map { rateBasis.format($0, for: metric) } ?? "—").monospacedDigit().fontWeight(.medium)
             }.font(.system(size: 11))
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
@@ -60,6 +61,6 @@ struct RateGaugeHistory: View {
             }.frame(height: 6)
         }.accessibilityElement(children: .ignore)
             .accessibilityLabel(L10n.text("\(metric.title) \(label) 속도 게이지"))
-            .accessibilityValue(validValue.map(ValueFormat.rate) ?? L10n.text("측정값 없음"))
+            .accessibilityValue(validValue.map { rateBasis.format($0, for: metric) } ?? L10n.text("측정값 없음"))
     }
 }

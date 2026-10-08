@@ -31,9 +31,12 @@ public struct MonitorConfiguration: Equatable, Sendable {
     public var interface: String?
     public var storageInterval: Int
     public var menuBarGrouping: MenuBarGrouping
+    public var networkRateBasis: ActivityRateBasis
+    public var diskRateBasis: ActivityRateBasis
     public init(enabled: Set<Metric> = Set(Metric.allCases), order: [Metric] = Metric.allCases,
                 interval: Int = MonitorConfiguration.defaultInterval, interface: String? = nil, storageInterval: Int = 30,
-                menuBarGrouping: MenuBarGrouping = MenuBarGrouping()) {
+                menuBarGrouping: MenuBarGrouping = MenuBarGrouping(),
+                networkRateBasis: ActivityRateBasis = .data, diskRateBasis: ActivityRateBasis = .data) {
         self.enabled = enabled
         var seen: Set<Metric> = []
         self.order = (order + Metric.allCases).filter { seen.insert($0).inserted }
@@ -41,6 +44,7 @@ public struct MonitorConfiguration: Equatable, Sendable {
         self.interface = interface
         self.storageInterval = StoragePollingInterval(rawValue: storageInterval)?.rawValue ?? 30
         self.menuBarGrouping = menuBarGrouping
+        self.networkRateBasis = networkRateBasis; self.diskRateBasis = diskRateBasis
     }
     public var visible: [Metric] { order.filter { enabled.contains($0) } }
     /// Detail panels follow group placement and show the upper member before its partner.
@@ -60,6 +64,8 @@ public struct SettingsRecord: Codable, Sendable {
     public var showsMemoryStorage: Bool?
     public var storageInterval: Int?
     public var menuBarGrouping: MenuBarGrouping?
+    public var networkRateBasis: String?
+    public var diskRateBasis: String?
     public init(configuration: MonitorConfiguration) {
         enabled = configuration.enabled.map(\.rawValue).sorted()
         order = configuration.order.map(\.rawValue)
@@ -67,6 +73,8 @@ public struct SettingsRecord: Codable, Sendable {
         interface = configuration.interface
         storageInterval = configuration.storageInterval
         menuBarGrouping = configuration.menuBarGrouping
+        networkRateBasis = configuration.networkRateBasis.rawValue
+        diskRateBasis = configuration.diskRateBasis.rawValue
     }
     public var configuration: MonitorConfiguration {
         var selected = enabled.map { Set($0.compactMap(Metric.init(rawValue:))) } ?? Set(Metric.allCases)
@@ -80,7 +88,9 @@ public struct SettingsRecord: Codable, Sendable {
         return MonitorConfiguration(
             enabled: selected, order: placement,
             interval: interval ?? MonitorConfiguration.defaultInterval, interface: interface, storageInterval: storageInterval ?? 30,
-            menuBarGrouping: menuBarGrouping ?? MenuBarGrouping()
+            menuBarGrouping: menuBarGrouping ?? MenuBarGrouping(),
+            networkRateBasis: networkRateBasis.flatMap(ActivityRateBasis.init(rawValue:)) ?? .data,
+            diskRateBasis: diskRateBasis.flatMap(ActivityRateBasis.init(rawValue:)) ?? .data
         )
     }
 }
@@ -117,8 +127,9 @@ public struct NetworkReading: Sendable {
     public let interface: String
     public let download: Double
     public let upload: Double
-    public init(interface: String, download: Double, upload: Double) {
-        self.interface = interface; self.download = download; self.upload = upload
+    public let basis: ActivityRateBasis
+    public init(interface: String, download: Double, upload: Double, basis: ActivityRateBasis = .data) {
+        self.interface = interface; self.download = download; self.upload = upload; self.basis = basis
     }
 }
 
@@ -142,7 +153,10 @@ public struct DiskCapacityReading: Sendable {
 public struct DiskActivityReading: Sendable {
     public let read: Double
     public let write: Double
-    public init(read: Double, write: Double) { self.read = read; self.write = write }
+    public let basis: ActivityRateBasis
+    public init(read: Double, write: Double, basis: ActivityRateBasis = .data) {
+        self.read = read; self.write = write; self.basis = basis
+    }
 }
 
 public struct DiskReading: Sendable {

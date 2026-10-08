@@ -100,11 +100,12 @@ private struct GaugeUsageSummary: View {
 }
 
 struct HistoryBarChart: View {
+    @Environment(\.activityRateBasis) private var rateBasis
     let metric: Metric
     let history: [HistoryPoint]
     let end: Date
     let color: Color
-    private var upper: Double { metric == .power ? ChartData.energyUpperBound(history: history) : (metric == .network || metric == .disk) ? ChartData.rateUpperBound(history: history) : 100 }
+    private var upper: Double { metric == .power ? ChartData.energyUpperBound(history: history) : (metric == .network || metric == .disk) ? ChartData.rateUpperBound(history: history, minimum: rateBasis == .data ? 1000 : 1) : 100 }
     var body: some View {
         let bound = upper, bars = ChartData.bars(history: history, end: end)
         HStack(spacing: 5) {
@@ -130,18 +131,18 @@ struct HistoryBarChart: View {
                 }
             }
             VStack(alignment: .trailing) {
-                Text((metric == .network || metric == .disk) ? (metric == .disk ? "R " : "↓ ") + ValueFormat.rate(bound) : metric == .power ? ValueFormat.watts(bound) : "100")
+                Text((metric == .network || metric == .disk) ? (metric == .disk ? "R " : "↓ ") + rateBasis.format(bound, for: metric) : metric == .power ? ValueFormat.watts(bound) : "100")
                 Spacer(minLength: 0)
                 Text("0")
                 if (metric == .network || metric == .disk) {
                     Spacer(minLength: 0)
-                    Text((metric == .disk ? "W " : "↑ ") + ValueFormat.rate(bound))
+                    Text((metric == .disk ? "W " : "↑ ") + rateBasis.format(bound, for: metric))
                 }
             }.font(.system(size: 8)).foregroundStyle(.secondary).frame(width: (metric == .network || metric == .disk || metric == .power) ? 59 : 22, alignment: .trailing)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(L10n.text("\(metric.title) 최근 5분 막대 그래프 · 5초 평균"))
-        .accessibilityValue(history.last?.primary.map { (metric == .network || metric == .disk) ? ValueFormat.rate($0) : metric == .power ? ValueFormat.watts($0) : ValueFormat.percent($0) } ?? L10n.text("측정값 없음"))
+        .accessibilityValue(history.last?.primary.map { (metric == .network || metric == .disk) ? rateBasis.format($0, for: metric) : metric == .power ? ValueFormat.watts($0) : ValueFormat.percent($0) } ?? L10n.text("측정값 없음"))
     }
 }
 

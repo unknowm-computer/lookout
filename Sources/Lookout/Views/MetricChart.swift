@@ -3,6 +3,7 @@ import SwiftUI
 
 /// Draw whole paths rather than a view/mark for every sample. No display-link or animation loop.
 struct MetricChart: View {
+    @Environment(\.activityRateBasis) private var rateBasis
     let metric: Metric
     let history: [HistoryPoint]
     let end: Date
@@ -10,7 +11,7 @@ struct MetricChart: View {
     private var upperBound: Double {
         if metric == .power { return ChartData.energyUpperBound(history: history) }
         guard (metric == .network || metric == .disk) else { return 100 }
-        return ChartData.rateUpperBound(history: history)
+        return ChartData.rateUpperBound(history: history, minimum: rateBasis == .data ? 1000 : 1)
     }
     var body: some View {
         let bound = upperBound
@@ -39,10 +40,10 @@ struct MetricChart: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(L10n.text("\(metric.title) 최근 5분 그래프"))
-        .accessibilityValue(history.last?.primary.map { (metric == .network || metric == .disk) ? ValueFormat.rate($0) : metric == .power ? ValueFormat.watts($0) : ValueFormat.percent($0) } ?? L10n.text("측정값 없음"))
+        .accessibilityValue(history.last?.primary.map { (metric == .network || metric == .disk) ? rateBasis.format($0, for: metric) : metric == .power ? ValueFormat.watts($0) : ValueFormat.percent($0) } ?? L10n.text("측정값 없음"))
     }
     private func axisLabel(_ value: Double) -> String {
-        (metric == .network || metric == .disk) ? ValueFormat.rate(value) : metric == .power ? ValueFormat.watts(value) : "\(Int(value))"
+        (metric == .network || metric == .disk) ? rateBasis.format(value, for: metric) : metric == .power ? ValueFormat.watts(value) : "\(Int(value))"
     }
     private func drawSeries(context: inout GraphicsContext, size: CGSize, upper: Double,
                             secondary: Bool, color: Color, fill: Bool) {

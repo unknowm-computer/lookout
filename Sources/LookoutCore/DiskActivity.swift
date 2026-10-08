@@ -6,14 +6,19 @@ public struct DiskDeviceCounter: Sendable {
     public let id: UInt64
     public let read: UInt64
     public let write: UInt64
-    public init(id: UInt64, read: UInt64, write: UInt64) { self.id = id; self.read = read; self.write = write }
+    public let readOperations: UInt64?
+    public let writeOperations: UInt64?
+    public init(id: UInt64, read: UInt64, write: UInt64, readOperations: UInt64? = nil, writeOperations: UInt64? = nil) {
+        self.id = id; self.read = read; self.write = write
+        self.readOperations = readOperations; self.writeOperations = writeOperations
+    }
 }
 
 public struct DiskCounter: Sendable {
     public let devices: [DiskDeviceCounter]
     public let uptime: Double
     public init(devices: [DiskDeviceCounter], uptime: Double) { self.devices = devices; self.uptime = uptime }
-    public func rate(since old: DiskCounter) -> DiskActivityReading? {
+    public func rate(since old: DiskCounter, basis: ActivityRateBasis = .data) -> DiskActivityReading? {
         let elapsed = uptime - old.uptime
         let current = devices.sorted { $0.id < $1.id }, previous = old.devices.sorted { $0.id < $1.id }
         guard elapsed.isFinite, elapsed > 0, !current.isEmpty,
@@ -21,10 +26,15 @@ public struct DiskCounter: Sendable {
               current.map(\.id) == previous.map(\.id) else { return nil }
         var read = 0.0, write = 0.0
         for (now, prior) in zip(current, previous) {
-            guard now.read >= prior.read, now.write >= prior.write else { return nil }
-            read += Double(now.read - prior.read); write += Double(now.write - prior.write)
+            let currentRead = basis == .data ? now.read : now.readOperations
+            let currentWrite = basis == .data ? now.write : now.writeOperations
+            let priorRead = basis == .data ? prior.read : prior.readOperations
+            let priorWrite = basis == .data ? prior.write : prior.writeOperations
+            guard let currentRead, let currentWrite, let priorRead, let priorWrite,
+                  currentRead >= priorRead, currentWrite >= priorWrite else { return nil }
+            read += Double(currentRead - priorRead); write += Double(currentWrite - priorWrite)
         }
-        return DiskActivityReading(read: read / elapsed, write: write / elapsed)
+        return DiskActivityReading(read: read / elapsed, write: write / elapsed, basis: basis)
     }
 }
 
@@ -41,7 +51,7 @@ public struct DiskSamplingState: Sendable {
                                 readCapacity: () throws -> DiskReading,
                                 readCounters: () throws -> DiskCounter,
                                 collectActivity: Bool = true, collectCapacity: Bool = true,
-                                capacityInterval: Int = 30) -> DiskReading {
+                                capacityInterval: Int = 30, basis: ActivityRateBasis = .data) -> DiskReading {
         let period = StoragePollingInterval(rawValue: capacityInterval)?.rawValue ?? 30
         if !collectCapacity || self.capacityInterval != period {
             capacityAttempt = nil; capacity = nil; capacityMessage = nil
@@ -68,7 +78,7 @@ public struct DiskSamplingState: Sendable {
         var activity: DiskActivityReading?, message: String?
         do {
             let counter = try readCounters()
-            activity = previous.flatMap { counter.rate(since: $0) }
+            activity = previous.flatMap { counter.rate(since: $0, basis: basis) }
             previous = counter
             if activity == nil { message = L10n.text("다음 디스크 측정을 기다리는 중") }
         } catch {
@@ -85,7 +95,7 @@ extension SystemMetrics {
     }
     /// Walk the mounted Data volume's service ancestors. Count each backing driver once;
     /// do not sum APFS volumes, unrelated external devices, or mounted disk images.
-    public static func diskCounters() throws -> DiskCounter {
+    public static func diskCounters(basis: ActivityRateBasis = .data) throws -> DiskCounter {
         var fs = statfs()
         guard statfs(startupDataPath, &fs) == 0 else { throw CollectionError.system(L10n.text("시작 디스크 장치를 찾을 수 없습니다.")) }
         let device = withUnsafePointer(to: &fs.f_mntfromname) { pointer in
@@ -112,7 +122,15 @@ extension SystemMetrics {
                   read.doubleValue >= 0, write.doubleValue >= 0 else {
                 throw CollectionError.system(L10n.text("시작 디스크 I/O 통계가 제공되지 않습니다."))
             }
-            counters[id] = DiskDeviceCounter(id: id, read: read.uint64Value, write: write.uint64Value)
+            let reads = stats["Operations (Read)"] as? NSNumber
+            let writes = stats["Operations (Write)"] as? NSNumber
+            if basis == .count {
+                guard let reads, let writes, reads.doubleValue >= 0, writes.doubleValue >= 0 else {
+                    throw CollectionError.system(L10n.text("이 Mac에서 디스크 IO 횟수를 제공하지 않습니다."))
+                }
+            }
+            counters[id] = DiskDeviceCounter(id: id, read: read.uint64Value, write: write.uint64Value,
+                                            readOperations: reads?.uint64Value, writeOperations: writes?.uint64Value)
         }
         guard IOIteratorIsValid(iterator) != 0, !counters.isEmpty else { throw CollectionError.system(L10n.text("이 Mac에서 시작 디스크 I/O 통계를 제공하지 않습니다.")) }
         return DiskCounter(devices: counters.values.sorted { $0.id < $1.id }, uptime: ProcessInfo.processInfo.systemUptime)

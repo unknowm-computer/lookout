@@ -61,6 +61,7 @@ struct MonitorPanel: View {
                                               chartStyle: settings.charts.style(for: metric), showsSwapDetails: settings.showsSwapDetails,
                                               processDetails: monitor.processDetails,
                                               detailsInitiallyExpanded: settings.menuBarDisplayMode == .individual)
+                                    .environment(\.activityRateBasis, settings.configuration.rateBasis(for: metric))
                                 if metric != metrics.last { Divider().padding(.horizontal, 16) }
                             }
                         }
@@ -129,6 +130,7 @@ struct MonitorPanel: View {
 }
 
 private struct MetricSection: View {
+    @Environment(\.activityRateBasis) private var rateBasis
     let metric: Metric
     let reading: MetricReading?
     let history: HistoryBuffer
@@ -159,6 +161,11 @@ private struct MetricSection: View {
     private var storage: DiskCapacityReading? {
         if case .storage(let capacity) = reading?.value { return capacity }; return nil
     }
+    private var activitySummary: String {
+        let basis = rateBasis.title(for: metric)
+        if case .network(let value) = reading?.value { return "\(basis) · \(value.interface)" }
+        return basis
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             if metric == .ssd {
@@ -168,9 +175,9 @@ private struct MetricSection: View {
                     Image(systemName: metric.symbol).foregroundStyle(color).frame(width: 16)
                     Text(metric.title).fontWeight(.semibold)
                     Spacer()
-                    if metric == .network {
-                        Text(summary).font(.system(size: 10)).foregroundStyle(.secondary)
-                    } else if metric != .disk {
+                    if metric == .network || metric == .disk {
+                        Text(activitySummary).font(.system(size: 10)).foregroundStyle(.secondary)
+                    } else {
                         Text(summary).monospacedDigit().fontWeight(.medium)
                     }
                 }.font(.system(size: 12))
@@ -228,10 +235,10 @@ private struct MetricSection: View {
             Circle().fill(tint).frame(width: 5, height: 5)
             Text(label).foregroundStyle(.secondary)
             Spacer(minLength: 0)
-            Text(ValueFormat.rate(value)).monospacedDigit().fontWeight(.medium)
+            Text(rateBasis.format(value, for: .network)).monospacedDigit().fontWeight(.medium)
         }.font(.system(size: 11)).frame(maxWidth: .infinity)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(L10n.text("네트워크 \(label) 속도"))
-            .accessibilityValue(ValueFormat.rate(value))
+            .accessibilityValue(rateBasis.format(value, for: .network))
     }
 }

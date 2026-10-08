@@ -58,6 +58,9 @@ import LookoutCore
             readings.removeValue(forKey: .network)
             histories.removeValue(forKey: .network)
         }
+        for metric in [Metric.network, .disk] where config.rateBasis(for: metric) != previousConfig.rateBasis(for: metric) {
+            readings.removeValue(forKey: metric); histories.removeValue(forKey: metric)
+        }
         previousConfig = config
         alertEngine.configure(settings.alerts, monitored: config.enabled)
         publishAlerts()

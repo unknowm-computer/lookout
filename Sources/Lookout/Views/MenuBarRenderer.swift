@@ -38,7 +38,7 @@ import LookoutCore
     private static let metricGap: CGFloat = 12
     private static let percentWidth = width("100%")
     private static let numberWidth = width("999.9", font: networkFont)
-    private static let unitWidth = ["B/s", "KB/s", "MB/s", "GB/s"].map { width($0, font: networkFont) }.max()!
+    private static let unitWidth = ["B/s", "KB/s", "MB/s", "GB/s", "pkt/s", "IO/s"].map { width($0, font: networkFont) }.max()!
     private static let arrowWidth = max(width("↓", font: networkFont), width("↑", font: networkFont))
 
     static func image(metrics: [Metric], readings: [Metric: MetricReading],
@@ -96,13 +96,13 @@ import LookoutCore
                 cells.append(Cell(text: value?.primary.map(ValueFormat.watts) ?? "—", width: width("999.9 W"), metric: metric))
             case .disk:
                 if case .disk(let disk) = value {
-                    cells += rateCells(upload: disk.activity?.read, download: disk.activity?.write, upperLabel: "R", lowerLabel: "W")
+                    cells += rateCells(upload: disk.activity?.read, download: disk.activity?.write, upperLabel: "R", lowerLabel: "W", basis: disk.activity?.basis ?? .data)
                 } else {
                     cells += rateCells(upload: nil, download: nil, upperLabel: "R", lowerLabel: "W")
                 }
             case .network:
                 if case .network(let network) = value {
-                    cells += rateCells(upload: network.upload, download: network.download)
+                    cells += rateCells(upload: network.upload, download: network.download, basis: network.basis)
                 } else {
                     cells += rateCells(upload: nil, download: nil)
                 }
@@ -179,9 +179,9 @@ import LookoutCore
         let labelCells = compact ? [] : [Cell(text: label, width: width(label) + 4, alignment: .left)]
         return labelCells + [Cell(text: value.map(ValueFormat.percent) ?? "—", width: percentWidth, metric: metric)]
     }
-    private static func rateCells(upload: Double?, download: Double?, upperLabel: String = "↑", lowerLabel: String = "↓") -> [Cell] {
-        let upper = upload.map(ValueFormat.rate) ?? "—"
-        let lower = download.map(ValueFormat.rate) ?? "—"
+    private static func rateCells(upload: Double?, download: Double?, upperLabel: String = "↑", lowerLabel: String = "↓", basis: ActivityRateBasis = .data) -> [Cell] {
+        let upper = upload.map { basis.format($0, for: upperLabel == "R" ? .disk : .network) } ?? "—"
+        let lower = download.map { basis.format($0, for: upperLabel == "R" ? .disk : .network) } ?? "—"
         return [Cell(text: upperLabel, width: upperLabel == "R" ? max(width("R", font: networkFont), width("W", font: networkFont)) : arrowWidth, alignment: .left, lowerText: lowerLabel),
                 // Right-align the whole value so short units end at the same edge as MB/s.
                 Cell(text: upper, width: numberWidth + 2 + unitWidth, lowerText: lower)]

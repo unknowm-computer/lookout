@@ -2,6 +2,7 @@ import LookoutCore
 import SwiftUI
 
 struct DiskVisualization: View {
+    @Environment(\.activityRateBasis) private var rateBasis
     let reading: MetricReading?
     let history: [HistoryPoint]
     let end: Date
@@ -35,9 +36,9 @@ struct DiskVisualization: View {
             Circle().fill(tint).frame(width: 5, height: 5)
             Text(label).foregroundStyle(.secondary)
             Spacer(minLength: 0)
-            Text(value.map(ValueFormat.rate) ?? "—").monospacedDigit().fontWeight(.medium)
+            Text(value.map { rateBasis.format($0, for: .disk) } ?? "—").monospacedDigit().fontWeight(.medium)
         }.font(.system(size: 11)).frame(maxWidth: .infinity)
             .accessibilityElement(children: .ignore).accessibilityLabel(L10n.text("디스크 \(label) 속도"))
-            .accessibilityValue(value.map(ValueFormat.rate) ?? L10n.text("측정값 없음"))
+            .accessibilityValue(value.map { rateBasis.format($0, for: .disk) } ?? L10n.text("측정값 없음"))
     }
 }

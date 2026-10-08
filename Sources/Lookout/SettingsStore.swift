@@ -25,7 +25,7 @@ import LookoutCore
         menuBarDisplayMode = defaults.string(forKey: "menuBarDisplayMode.v1")
             .flatMap(MenuBarDisplayMode.init(rawValue:)) ?? .individual
         menuBarDensity = defaults.string(forKey: "menuBarDensity.v1")
-            .flatMap(MenuBarDensity.init(rawValue:)) ?? .automatic
+            .flatMap(MenuBarDensity.init(rawValue:)) ?? .normal
         let storedConfiguration = defaults.data(forKey: Self.key)
             .flatMap { try? JSONDecoder().decode(SettingsRecord.self, from: $0) }?.configuration ?? MonitorConfiguration()
         configuration = capabilities.applying(to: storedConfiguration)
@@ -130,6 +130,12 @@ import LookoutCore
     func setMenuBarGrouping(_ grouping: MenuBarGrouping) {
         guard grouping != configuration.menuBarGrouping else { return }
         var next = configuration; next.menuBarGrouping = grouping; update(next)
+    }
+    func setRateBasis(_ basis: ActivityRateBasis, for metric: Metric) {
+        guard metric == .network || metric == .disk, basis != configuration.rateBasis(for: metric) else { return }
+        var next = configuration
+        if metric == .network { next.networkRateBasis = basis } else { next.diskRateBasis = basis }
+        update(next)
     }
     func setInterface(_ interface: String?) {
         var next = configuration; next.interface = interface; update(next)

@@ -230,8 +230,8 @@ import SwiftUI
                 text = L10n.text("\(settings.menuBarValues.memory.title) \(settings.menuBarValues.text(for: .memory, value: value)), 메모리 압력 \(memory.pressure?.title ?? L10n.text("확인 불가"))")
             case .storage:
                 text = "\(settings.menuBarValues.storage.title) \(settings.menuBarValues.text(for: .ssd, value: value))"
-            case .network(let network): text = L10n.text("다운로드 \(ValueFormat.rate(network.download)), 업로드 \(ValueFormat.rate(network.upload))")
-            case .disk(let disk): text = L10n.text("읽기 \(disk.activity.map { ValueFormat.rate($0.read) } ?? "—"), 쓰기 \(disk.activity.map { ValueFormat.rate($0.write) } ?? "—")")
+            case .network(let network): text = L10n.text("다운로드 \(network.basis.format(network.download, for: .network)), 업로드 \(network.basis.format(network.upload, for: .network))")
+            case .disk(let disk): text = L10n.text("읽기 \(disk.activity.map { $0.basis.format($0.read, for: .disk) } ?? "—"), 쓰기 \(disk.activity.map { $0.basis.format($0.write, for: .disk) } ?? "—")")
             case .power(let energy): text = energy.watts.map(ValueFormat.watts) ?? "—"
             default: text = value?.primary.map(ValueFormat.percent) ?? "—"
             }

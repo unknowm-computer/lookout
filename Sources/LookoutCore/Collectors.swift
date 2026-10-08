@@ -25,14 +25,24 @@ public struct NetworkCounter: Sendable {
     public let received: UInt64
     public let sent: UInt64
     public let uptime: Double
-    public init(name: String, received: UInt64, sent: UInt64, uptime: Double) {
+    public let receivedPackets: UInt64?
+    public let sentPackets: UInt64?
+    public init(name: String, received: UInt64, sent: UInt64, uptime: Double,
+                receivedPackets: UInt64? = nil, sentPackets: UInt64? = nil) {
         self.name = name; self.received = received; self.sent = sent; self.uptime = uptime
+        self.receivedPackets = receivedPackets; self.sentPackets = sentPackets
     }
-    public func rate(since old: NetworkCounter) -> NetworkReading? {
+    public func rate(since old: NetworkCounter, basis: ActivityRateBasis = .data) -> NetworkReading? {
         let duration = uptime - old.uptime
-        guard name == old.name, duration > 0, received >= old.received, sent >= old.sent else { return nil }
-        return NetworkReading(interface: name, download: Double(received - old.received) / duration,
-                              upload: Double(sent - old.sent) / duration)
+        let received = basis == .data ? self.received : receivedPackets
+        let sent = basis == .data ? self.sent : sentPackets
+        let priorReceived = basis == .data ? old.received : old.receivedPackets
+        let priorSent = basis == .data ? old.sent : old.sentPackets
+        guard name == old.name, duration.isFinite, duration > 0,
+              let received, let sent, let priorReceived, let priorSent,
+              received >= priorReceived, sent >= priorSent else { return nil }
+        return NetworkReading(interface: name, download: Double(received - priorReceived) / duration,
+                              upload: Double(sent - priorSent) / duration, basis: basis)
     }
 }
 
@@ -117,7 +127,9 @@ public enum SystemMetrics {
                         if if_indextoname(UInt32(info.ifm_index), &name) != nil {
                             let interfaceName = String(decoding: name.prefix(while: { $0 != 0 }).map { UInt8(bitPattern: $0) }, as: UTF8.self)
                             result.append(NetworkCounter(name: interfaceName, received: info.ifm_data.ifi_ibytes,
-                                                         sent: info.ifm_data.ifi_obytes, uptime: uptime))
+                                                         sent: info.ifm_data.ifi_obytes, uptime: uptime,
+                                                         receivedPackets: info.ifm_data.ifi_ipackets,
+                                                         sentPackets: info.ifm_data.ifi_opackets))
                         }
                     }
                 }
@@ -149,9 +161,9 @@ public actor MetricSampler {
         // SSD capacity and disk I/O have independent demand and polling intervals.
         let disk = !config.needsStorageCapacity && !config.enabled.contains(.disk) ? nil :
             diskState.sample(uptime: ProcessInfo.processInfo.systemUptime, date: date,
-                             readCapacity: { try SystemMetrics.disk() }, readCounters: { try SystemMetrics.diskCounters() },
+                             readCapacity: { try SystemMetrics.disk() }, readCounters: { try SystemMetrics.diskCounters(basis: config.diskRateBasis) },
                              collectActivity: config.enabled.contains(.disk), collectCapacity: config.needsStorageCapacity,
-                             capacityInterval: config.storageInterval)
+                             capacityInterval: config.storageInterval, basis: config.diskRateBasis)
         return config.visible.map { metric in
             counts[metric, default: 0] += 1
             do {
@@ -181,7 +193,7 @@ public actor MetricSampler {
                         return MetricReading(metric: metric, date: date, value: nil,
                                              message: config.interface == nil ? L10n.text("네트워크 연결 없음") : L10n.text("선택한 인터페이스를 사용할 수 없습니다"))
                     }
-                    let value = previousNetwork.flatMap { counter.rate(since: $0) }
+                    let value = previousNetwork.flatMap { counter.rate(since: $0, basis: config.networkRateBasis) }
                     previousNetwork = counter
                     return MetricReading(metric: metric, date: date, value: value.map(ReadingValue.network),
                                          message: value == nil ? L10n.text("\(counter.name) · 다음 측정을 기다리는 중") : nil)

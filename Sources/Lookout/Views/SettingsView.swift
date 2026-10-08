@@ -113,6 +113,9 @@ struct SettingsView: View {
                                 .disabled(!settings.configuration.enabled.contains(.memory))
                                 .help(L10n.text("체크하면 Swap 바 그래프와 사용·할당 여유를 표시합니다. 해제하면 사용량/현재 할당량 한 줄만 표시합니다."))
                         }
+                        if metric == .network || metric == .disk {
+                            ActivityRatePicker(metric: metric, settings: settings)
+                        }
                         Spacer(minLength: 8)
                         if metric == .ssd {
                             Text(L10n.text("체크 주기")).font(.system(size: 10)).foregroundStyle(.secondary).fixedSize()
