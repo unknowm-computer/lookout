@@ -341,3 +341,6 @@
 "표시 기준: 데이터 전송량 또는 초당 읽기·쓰기 작업 수" = "Display data throughput or read/write operations per second";
 
 "이 Mac에서 디스크 IO 횟수를 제공하지 않습니다." = "Disk operation counts are unavailable on this Mac.";
+"창으로 분리" = "Detach Window";
+"상세 정보를 독립 창으로 열기" = "Open details in a separate window";
+"Lookout 상세 정보" = "Lookout Details";

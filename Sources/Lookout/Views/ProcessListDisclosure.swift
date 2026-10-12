@@ -72,9 +72,7 @@ struct ProcessListDisclosure: View {
             updateDemand()
         }
         .onChange(of: expanded) { _, _ in updateDemand() }
-        .onChange(of: visible) { _, value in
-            if value { updateDemand() } else { close() }
-        }
+        .onChange(of: visible) { _, _ in updateDemand() }
         .onDisappear { close() }
     }
     private func updateDemand() {

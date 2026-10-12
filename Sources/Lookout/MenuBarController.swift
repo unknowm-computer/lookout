@@ -43,6 +43,8 @@ import SwiftUI
     private var selectedMetrics: [Metric]?
     private let popover = NSPopover()
     private var settingsWindow: NSWindow?
+    private lazy var detailWindow = DetailWindowController(monitor: monitor, settings: settings,
+                                                          openSettings: { [weak self] in self?.showSettings() })
     private var subscriptions: Set<AnyCancellable> = []
     private var presentationID = UUID()
     private var buttonUpdateQueued = false
@@ -84,6 +86,7 @@ import SwiftUI
         subscriptions.removeAll()
         layoutTask?.cancel()
         popover.performClose(nil)
+        detailWindow.close()
         for item in statusItems.values { removeStatusItem(item) }
         statusItems.removeAll()
     }
@@ -291,6 +294,15 @@ import SwiftUI
         popover.contentViewController = nil
         scheduleLayoutCheck()
     }
+    func detachPanel() {
+        guard popover.isShown else { return }
+        let metrics = selectedMetrics
+        let panelWindow = popover.contentViewController?.view.window
+        let screen = panelWindow?.screen ?? NSScreen.main
+        let frame = panelWindow?.frame
+        popover.performClose(nil)
+        detailWindow.show(metrics: metrics, screen: screen, near: frame)
+    }
     func showSettings() {
         if popover.isShown { popover.performClose(nil) }
         if settingsWindow == nil {
@@ -317,7 +329,7 @@ private struct StatusPopoverContent: View {
     let resize: (CGSize) -> Void
     var body: some View {
         MonitorPanel(monitor: monitor, settings: settings, notifications: monitor.notifications,
-                     onOpenSettings: { owner.showSettings() }, onSizeChange: resize,
+                     onOpenSettings: { owner.showSettings() }, onDetach: { owner.detachPanel() }, onSizeChange: resize,
                      presented: owner.presented, initialScreenHeight: screenHeight, selectedMetrics: selectedMetrics)
     }
 }
