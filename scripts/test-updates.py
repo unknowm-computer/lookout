@@ -106,6 +106,24 @@ class UpdateDistributionTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 release.validate_bundle({**self.info, key: value}, self.config)
 
+    def test_letter_suffix_display_version_keeps_numeric_update_build_and_safe_paths(self):
+        info = {**self.info, 'CFBundleShortVersionString': '0.6.3a', 'CFBundleVersion': '10'}
+        self.assertEqual(release.validate_bundle(info, self.config), ('0.6.3a', '10', '15.0'))
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / 'Lookout-0.6.3a.zip'
+            archive.write_bytes(b'archive contents')
+            tree = release.make_appcast(info, self.config, archive, base64.b64encode(bytes(64)).decode())
+            item = tree.find('./channel/item')
+            namespace = {'sparkle': release.SPARKLE}
+            self.assertEqual(item.find('sparkle:version', namespace).text, '10')
+            self.assertEqual(item.find('sparkle:shortVersionString', namespace).text, '0.6.3a')
+            self.assertEqual(item.find('enclosure').get('url'),
+                             'https://github.com/unknowm-computer/lookout/releases/download/v0.6.3a/Lookout-0.6.3a.zip')
+        for key, invalid in [('CFBundleVersion', '10a'), ('LSMinimumSystemVersion', '15a'),
+                             ('CFBundleShortVersionString', '0.6.3a/next'), ('CFBundleShortVersionString', '0.6.3a;command')]:
+            with self.assertRaises(ValueError):
+                release.validate_bundle({**info, key: invalid}, self.config)
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

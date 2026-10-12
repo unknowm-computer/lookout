@@ -37,7 +37,7 @@ import SwiftUI
         presented = true
         let host = NSHostingController(rootView: DetachedPanelContent(owner: self, monitor: monitor,
             settings: settings, selectedMetrics: metrics, screenHeight: screen?.visibleFrame.height ?? 720,
-            openSettings: openSettings, resize: { [weak self] size in
+            resize: { [weak self] size in
                 Task { @MainActor [weak self] in self?.resize(size, token: token) }
             }))
         host.sizingOptions = []
@@ -70,6 +70,10 @@ import SwiftUI
     }
 
     func close() { window?.close() }
+    func showSettings() {
+        close()
+        openSettings()
+    }
     func windowWillClose(_ notification: Notification) {
         presented = false
         presentationID = UUID()
@@ -87,11 +91,11 @@ private struct DetachedPanelContent: View {
     @ObservedObject var settings: SettingsStore
     let selectedMetrics: [Metric]?
     let screenHeight: CGFloat
-    let openSettings: () -> Void
     let resize: (CGSize) -> Void
     var body: some View {
         MonitorPanel(monitor: monitor, settings: settings, notifications: monitor.notifications,
-                     onOpenSettings: openSettings, onSizeChange: resize, presented: owner.presented,
+                     onOpenSettings: { owner.showSettings() }, onClose: { owner.close() },
+                     onSizeChange: resize, presented: owner.presented,
                      initialScreenHeight: screenHeight, selectedMetrics: selectedMetrics)
     }
 }

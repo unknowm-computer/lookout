@@ -8,6 +8,7 @@ struct MonitorPanel: View {
     @ObservedObject var notifications: NotificationService
     var onOpenSettings: (() -> Void)? = nil
     var onDetach: (() -> Void)? = nil
+    var onClose: (() -> Void)? = nil
     var onSizeChange: ((CGSize) -> Void)? = nil
     var presented = true
     var initialScreenHeight: CGFloat? = nil
@@ -111,8 +112,13 @@ struct MonitorPanel: View {
                 .disabled(isOpeningActivityMonitor)
                 .help(L10n.text("macOS 활성 상태 보기 열기"))
                 Spacer()
-                Button(L10n.text("종료")) { monitor.stop(); NSApp.terminate(nil) }
-                    .keyboardShortcut("q", modifiers: .command)
+                if let onClose {
+                    Button(L10n.text("닫기"), action: onClose)
+                        .keyboardShortcut("w", modifiers: .command)
+                } else {
+                    Button(L10n.text("종료")) { monitor.stop(); NSApp.terminate(nil) }
+                        .keyboardShortcut("q", modifiers: .command)
+                }
             }
             .buttonStyle(PanelActionButtonStyle(borderless: true)).font(.system(size: 11))
             .padding(.horizontal, 16).padding(.vertical, 11)

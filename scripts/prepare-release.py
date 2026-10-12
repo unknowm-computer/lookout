@@ -37,8 +37,11 @@ def validate_bundle(info, config):
     version = str(info.get('CFBundleShortVersionString', ''))
     build = str(info.get('CFBundleVersion', ''))
     minimum = str(info.get('LSMinimumSystemVersion', ''))
-    if not all(re.fullmatch(r'[0-9]+(?:\.[0-9]+)*', value) for value in (version, build, minimum)):
-        raise ValueError('App version, build number and minimum macOS version must be numeric dotted versions.')
+    # Display labels may have a letter suffix; Sparkle compares the numeric build only.
+    if not re.fullmatch(r'[0-9]+(?:\.[0-9]+)*[a-z]?', version):
+        raise ValueError('App display version must be a numeric dotted version with an optional lowercase letter suffix.')
+    if not all(re.fullmatch(r'[0-9]+(?:\.[0-9]+)*', value) for value in (build, minimum)):
+        raise ValueError('Build number and minimum macOS version must be numeric dotted versions.')
     return version, build, minimum
 
 

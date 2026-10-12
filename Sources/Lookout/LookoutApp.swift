@@ -50,9 +50,7 @@ import UserNotifications
     private let services = AppServices.shared
     var body: some Scene {
         Window("Lookout", id: "preview") {
-            MonitorPanel(monitor: services.monitor, settings: services.settings,
-                         notifications: services.monitor.notifications,
-                         onOpenSettings: { services.menuBar.showSettings() })
+            PreviewPanelContent(services: services)
         }
         .windowResizability(.contentSize)
         .defaultLaunchBehavior(CommandLine.arguments.contains("--panel") ? .presented : .suppressed)
@@ -64,6 +62,19 @@ import UserNotifications
                     .keyboardShortcut(",", modifiers: .command)
             }
         }
+    }
+}
+
+private struct PreviewPanelContent: View {
+    let services: AppServices
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        MonitorPanel(monitor: services.monitor, settings: services.settings,
+                     notifications: services.monitor.notifications,
+                     onOpenSettings: {
+                         dismiss()
+                         services.menuBar.showSettings()
+                     }, onClose: { dismiss() })
     }
 }
 

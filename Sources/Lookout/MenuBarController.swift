@@ -305,6 +305,7 @@ import SwiftUI
     }
     func showSettings() {
         if popover.isShown { popover.performClose(nil) }
+        detailWindow.close()
         if settingsWindow == nil {
             let host = NSHostingController(rootView: SettingsView(settings: settings, monitor: monitor, updates: updates, menuBar: self))
             let window = NSWindow(contentViewController: host)

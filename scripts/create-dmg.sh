@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 bash scripts/build.sh
 task_app_dir="$PWD/build/Lookout.app"
 task_version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$task_app_dir/Contents/Info.plist")
-if [[ ! "$task_version" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+if [[ ! "$task_version" =~ ^[0-9]+(\.[0-9]+)*[a-z]?$ ]]; then
     echo "Invalid app version for DMG filename: $task_version" >&2
     exit 1
 fi

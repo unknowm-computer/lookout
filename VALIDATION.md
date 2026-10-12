@@ -1,6 +1,6 @@
 # Lookout 검증 현황
 
-현재 상태 정리: 2026-10-12 · 버전 `0.6.3` (build `9`). 현재 구현에 유효한 계산·빌드·실기기 결과를 모았다. 최신 수정별 테스트와 실제 실행 확인은 아래 날짜별 기록을 따른다.
+현재 상태 정리: 2026-10-12 · 버전 `0.6.3a` (build `10`). 현재 구현에 유효한 계산·빌드·실기기 결과를 모았다. 최신 수정별 테스트와 실제 실행 확인은 아래 날짜별 기록을 따른다.
 
 기능 계약은 [SPEC.md](SPEC.md), 남은 작업은 [PLAN.md](PLAN.md), 실행 절차는 [README.md](README.md)를 따른다. 변경 당시의 상세 결과와 철회된 시도는 [검증 이력](docs/VALIDATION_HISTORY.md)에 보존한다.
 
@@ -11,13 +11,24 @@
 | Mac | MacBook Pro `MacBookPro18,1`, Apple M1 Pro, 메모리 32 GiB |
 | OS | macOS 27.0, build `26A428` |
 | 개발 도구 | Xcode 27.0, Swift 6.4 |
-| 앱 | `0.6.3`, `build/Lookout.app`, 로컬 ad-hoc 서명 |
+| 앱 | `0.6.3a`, `build/Lookout.app`, 로컬 ad-hoc 서명 |
 | 빌드 대상 | `arm64 + x86_64`, 최소 macOS 15.0 |
 | 사용자 실기기 확인 | Apple Silicon·Intel Mac 및 macOS 15·26 정상 실행 보고 (2026-10-06) |
 
 최소 지원 OS와 실제 실행 환경은 구분한다. 사용자 실기기 확인으로 Apple Silicon·Intel Mac 및 macOS 15·26에서의 정상 실행을 기록한다. 구체적인 기종·OS 세부 버전·기기와 OS의 조합별 결과 및 기능별 시나리오는 제공되지 않았으므로 모든 조합·기능의 검증 완료로 확대하지 않는다.
 
 ## 2. 확인된 빌드·계산 결과
+
+### 2026-10-12 0.6.3a 배포 준비
+
+- 표시 버전을 `0.6.3a`, 내부 build를 `10`으로 올렸다. 창 하단의 닫기는 해당 창만 닫고, 설정 진입 시 분리 창을 먼저 닫는다. 표시 버전에 소문자 한 글자 수정 접미사를 허용하도록 배포·DMG 스크립트를 맞췄으며 내부 build·최소 OS의 숫자 검증과 경로 안전성 검증은 유지한다.
+- Swift 테스트 122개(코어 94개·앱 28개), 업데이트 배포 테스트 10개, 설치 도구 테스트 8개가 통과했다. Universal 앱·DMG·서명 ZIP·appcast·SHA-256 목록을 `build/releases/v0.6.3a-build10/`에 생성했다. ZIP 서명·원본 체크섬, DMG 내부 버전·두 아키텍처·중첩 서명을 확인했다. 실제 Sparkle 2.10.0 파서가 표시 버전 `0.6.3a`와 내부 build `10`을 읽고 build `9`보다 새 버전, build `10`과 같은 버전으로 판단하는 것을 확인했다. 관련 로그는 `.build/release-0.6.3a-prepare.log`, `.build/release-0.6.3a-tests.log`, `.build/release-0.6.3a-update-tests.log`, `.build/release-0.6.3a-installer-tests.log`에 보관한다. 실제 업데이트 설치·재실행은 별도 검증이다.
+
+### 2026-10-12 분리 창의 닫기·설정 동작
+
+- 분리 창 하단의 종료를 창만 닫는 `닫기`로 바꿨다. `⌘W`를 제공하며 메뉴바 팝업은 기존 앱 종료 동작을 유지한다. 분리 창의 설정 버튼과 설정 메뉴·단축키 진입 시 분리 창을 먼저 닫는다. 테스트용 `--panel` 창에도 자체 닫기·설정 전 닫기를 연결했다.
+- Swift 테스트 122개(코어 94개·앱 28개), Universal 빌드·엄격한 중첩 서명·공백 검사가 통과했다. 전용 설정의 검증 앱에서 팝업의 종료·분리 창의 닫기 문구를 확인하고 하단 닫기를 클릭했다. 동일 PID 유지와 다시 연 CPU 상세의 기록·수치 갱신을 확인했다. 분리 창의 설정 버튼을 클릭한 뒤 설정 창이 열리고 윈도우 메뉴에 상세 창이 남지 않는 것도 확인했다. 테스트용 창의 실행 확인은 수행하지 않았다.
+- `.build/detached-panel-close-build.log`, `.build/detached-panel-close-tests.log`, `.build/detached-panel-close.png`, `.build/detached-panel-settings-close.ax.txt`에 결과를 보관한다. 검증 앱을 종료하고 전용 설정을 정리했다. 수정은 `build/Lookout.app`에 반영했으며 게시된 0.6.3 Release·DMG·업데이트 ZIP은 그대로다.
 
 ### 2026-10-12 0.6.3 Release 게시
 
