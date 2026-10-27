@@ -23,6 +23,7 @@ task_verify_universal() {
 task_swift_build_args=(-c release --arch arm64 --arch x86_64 --disable-sandbox
     --cache-path .build/cache --config-path .build/config --security-path .build/security)
 xcrun swift build "${task_swift_build_args[@]}"
+xcrun swift build "${task_swift_build_args[@]}" --product LookoutFanHelper
 
 task_bin_dir=$(xcrun swift build "${task_swift_build_args[@]}" --show-bin-path)
 task_verify_universal "$task_bin_dir/Lookout"
@@ -58,6 +59,15 @@ mkdir -p "$task_app_dir/Contents/Frameworks"
 ditto "$task_sparkle_framework" "$task_app_dir/Contents/Frameworks/Sparkle.framework"
 xcrun swift -module-cache-path "$PWD/.build/module-cache" scripts/GenerateIcon.swift "$PWD/build/AppIcon.iconset"
 iconutil -c icns build/AppIcon.iconset -o "$task_app_dir/Contents/Resources/AppIcon.icns"
+# Fan control daemon is registered only after an explicit action in settings.
+mkdir -p "$task_app_dir/Contents/Library/Helpers" "$task_app_dir/Contents/Library/LaunchDaemons"
+cp "$task_bin_dir/LookoutFanHelper" "$task_app_dir/Contents/Library/Helpers/LookoutFanHelper.new"
+xcrun strip -x -S "$task_app_dir/Contents/Library/Helpers/LookoutFanHelper.new"
+task_verify_universal "$task_app_dir/Contents/Library/Helpers/LookoutFanHelper.new"
+cp Resources/local.lookout.fan-helper.plist "$task_app_dir/Contents/Library/LaunchDaemons/"
+codesign --force --sign - --identifier local.lookout.fan-helper "$task_app_dir/Contents/Library/Helpers/LookoutFanHelper.new"
+# Replace the inode: overwriting an executed helper can retain a stale kernel signing cache.
+mv -f "$task_app_dir/Contents/Library/Helpers/LookoutFanHelper.new" "$task_app_dir/Contents/Library/Helpers/LookoutFanHelper"
 codesign --force --sign - "$task_app_dir"
 codesign --verify --deep --strict "$task_app_dir"
 printf 'Built Universal (arm64 + x86_64) %s\n' "$task_app_dir"

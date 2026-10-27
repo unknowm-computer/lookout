@@ -45,7 +45,11 @@ private struct AlertRuleView: View {
     private var supported: Bool { settings.capabilities.supports(metric) }
     private var monitored: Bool { settings.configuration.enabled.contains(metric) }
     private var title: String {
-        switch metric { case .ssd: L10n.text("SSD 여유 공간"); default: L10n.text("\(metric.title) 사용률") }
+        switch metric {
+        case .ssd: L10n.text("SSD 여유 공간")
+        case .cooling: metric.title
+        default: L10n.text("\(metric.title) 사용률")
+        }
     }
     private var threshold: Binding<Double> {
         Binding(get: { rule.threshold }, set: { value in settings.updateAlert(metric) { $0.threshold = value } })
@@ -80,6 +84,10 @@ private struct AlertRuleView: View {
             Text(settings.capabilities.unsupportedReason(for: metric) ??
                  (monitored ? rule.recoveryDescription : L10n.text("모니터링 꺼짐 · 알림 판단 일시 중지")))
                 .font(.system(size: 10)).foregroundStyle(.secondary)
+            if metric == .cooling, supported {
+                Text(L10n.text("CPU·GPU 중 높은 온도를 기준으로 알립니다. 팬 설정과 관계없이 동작합니다."))
+                    .font(.system(size: 10)).foregroundStyle(.secondary)
+            }
         }.padding(11).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
     }
     private var durations: [Double] { Array(Set([0, 10, 30, 60, 120, rule.duration])).sorted() }

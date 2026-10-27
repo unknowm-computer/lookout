@@ -40,6 +40,7 @@ struct SettingsView: View {
             }
         }
         .padding(24).frame(width: 480, height: 560)
+        .environmentObject(monitor.coolingControl)
         .buttonStyle(PanelActionButtonStyle())
         .onAppear { monitor.refreshInterfaces() }
         .alert(L10n.text("언어 변경 적용"), isPresented: $showingLanguageRestart) {
@@ -91,8 +92,12 @@ struct SettingsView: View {
                 sectionTitle(L10n.text("모니터링 항목 · 왼쪽부터 표시 순서"))
                 MetricReorderList(scope: .placement, order: settings.configuration.order, separators: true,
                                   footnote: { metric in
-                                      settings.capabilities.unsupportedReason(for: metric)
-                                          ?? (metric == .disk ? L10n.text("macOS가 실행 중인 디스크의 읽기·쓰기 속도를 측정합니다.") : nil)
+                                      if let reason = settings.capabilities.unsupportedReason(for: metric) { return reason }
+                                      switch metric {
+                                      case .disk: return L10n.text("macOS가 실행 중인 디스크의 읽기·쓰기 속도를 측정합니다.")
+                                      case .cooling: return L10n.text("온도 기반 제어는 M1 Pro용 시험 기능입니다.")
+                                      default: return nil
+                                      }
                                   },
                                   move: { settings.move($0, to: $1) }) { metric, _ in
                     HStack(spacing: 8) {
@@ -117,7 +122,12 @@ struct SettingsView: View {
                             ActivityRatePicker(metric: metric, settings: settings)
                         }
                         Spacer(minLength: 8)
-                        if metric == .ssd {
+                        if metric == .cooling {
+                            Text(L10n.text("팬 설정")).font(.system(size: 10)).foregroundStyle(.secondary).fixedSize()
+                            CoolingModePicker(canControl: coolingReading?.canControl == true)
+                                .labelsHidden().frame(width: 110)
+                                .disabled(!settings.configuration.enabled.contains(.cooling))
+                        } else if metric == .ssd {
                             Text(L10n.text("체크 주기")).font(.system(size: 10)).foregroundStyle(.secondary).fixedSize()
                             Picker(L10n.text("SSD 체크 주기"), selection: Binding(
                                 get: { settings.configuration.storageInterval },
@@ -141,6 +151,9 @@ struct SettingsView: View {
                 Text(L10n.text("오른쪽 손잡이를 드래그하여 배치 순서를 바꿉니다. 끄면 표시와 데이터 수집이 함께 중단됩니다."))
                     .font(.system(size: 11)).foregroundStyle(.secondary)
             }
+            if settings.configuration.enabled.contains(.cooling) {
+                CoolingAccessView(canControl: coolingReading?.canControl == true)
+            }
             VStack(alignment: .leading, spacing: 7) {
                 HStack {
                     Text(L10n.text("갱신 주기"))
@@ -152,6 +165,11 @@ struct SettingsView: View {
                 Text(L10n.text("SSD 저장공간은 위 SSD 항목의 설정을 따릅니다."))
                     .font(.system(size: 11)).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if settings.configuration.enabled.contains(.cooling) {
+                    Text(L10n.text("시스템 온도는 최소 5초 간격으로 확인합니다."))
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             VStack(alignment: .leading, spacing: 7) {
                 HStack {
@@ -171,6 +189,9 @@ struct SettingsView: View {
                     .font(.system(size: 11)).foregroundStyle(.secondary)
             }
         }.font(.system(size: 12))
+    }
+    private var coolingReading: CoolingReading? {
+        if case .cooling(let value) = monitor.readings[.cooling]?.value { return value }; return nil
     }
     private var availableInterfaces: [String] {
         var names = monitor.interfaces

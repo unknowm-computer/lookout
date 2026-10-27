@@ -13,7 +13,16 @@ import LookoutCore
         Self.paint(presentation: presentation, pressure: pressure, storageMode: storageMode)
     }
     static func paint(presentation: MenuBarRenderer.Presentation, pressure: MemoryPressure?, storageMode: CapacityMenuBarValue) {
-        for value in presentation.highlightedValues { MenuBarRenderer.draw(value, color: .systemRed) }
+        for value in presentation.highlightedValues { MenuBarRenderer.draw(value, color: value.color) }
+        for symbol in presentation.coloredSymbols {
+            let colored = NSImage(size: symbol.image.size)
+            colored.lockFocus()
+            symbol.image.draw(at: .zero, from: .zero, operation: .sourceOver, fraction: 1)
+            symbol.color.setFill()
+            NSRect(origin: .zero, size: colored.size).fill(using: .sourceIn)
+            colored.unlockFocus()
+            colored.draw(in: symbol.frame)
+        }
         if let frame = presentation.pressureFrame {
             let color: NSColor
             switch pressure {
@@ -38,7 +47,7 @@ import LookoutCore
     static func update(button: NSStatusBarButton, presentation: MenuBarRenderer.Presentation,
                        pressure: MemoryPressure?, storageMode: CapacityMenuBarValue) {
         let existing = button.subviews.compactMap { $0 as? MenuBarAccentOverlay }.first
-        guard presentation.pressureFrame != nil || presentation.storageFrame != nil || !presentation.highlightedValues.isEmpty else {
+        guard presentation.pressureFrame != nil || presentation.storageFrame != nil || !presentation.highlightedValues.isEmpty || !presentation.coloredSymbols.isEmpty else {
             existing?.removeFromSuperview(); return
         }
         let view = existing ?? MenuBarAccentOverlay(frame: .zero)

@@ -22,7 +22,7 @@ struct MonitorPanel: View {
     @State private var isOpeningActivityMonitor = false
     @State private var activityMonitorError: String?
     private var metrics: [Metric] {
-        settings.configuration.detailMetrics.filter { selectedMetrics?.contains($0) ?? true }
+        settings.configuration.detailMetrics(selected: selectedMetrics)
     }
     private var activeAlerts: [AlertEvent] {
         monitor.activeAlerts.filter { selectedMetrics?.contains($0.metric) ?? true }
@@ -127,6 +127,7 @@ struct MonitorPanel: View {
         .frame(width: 340)
         // Report the intrinsic content height to either the preview window or the native popover.
         .fixedSize(horizontal: false, vertical: true)
+        .environmentObject(monitor.coolingControl)
         .background(.regularMaterial)
         .alert(L10n.text("활성 상태 보기를 열 수 없습니다."), isPresented: Binding(
             get: { activityMonitorError != nil },
@@ -159,12 +160,14 @@ private struct MetricSection: View {
     private var color: Color {
         switch metric {
         case .cpu: .cyan; case .memory: .purple; case .network: .green
+        case .cooling: .cyan
         case .disk, .ssd: .blue; case .power: .yellow; case .gpu: .orange
         }
     }
     private var summary: String {
         guard let value = reading?.value else { return "—" }
         switch value {
+        case .cooling(let value): return value.temperature.map(ValueFormat.temperature) ?? "—"
         case .cpu(let value): return ValueFormat.percent(value)
         case .memory(let value): return "\(ValueFormat.memory(value.used)) / \(ValueFormat.memory(value.total))"
         case .network(let value): return value.interface
@@ -173,6 +176,9 @@ private struct MetricSection: View {
         case .power(let value): return value.watts.map(ValueFormat.watts) ?? "—"
         case .gpu(let value): return ValueFormat.percent(value.utilization)
         }
+    }
+    private var cooling: CoolingReading? {
+        if case .cooling(let value) = reading?.value { return value }; return nil
     }
     private var storage: DiskCapacityReading? {
         if case .storage(let capacity) = reading?.value { return capacity }; return nil
@@ -184,7 +190,9 @@ private struct MetricSection: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
-            if metric == .ssd {
+            if metric == .cooling {
+                CoolingMetricView(reading: cooling, history: history.points, end: end)
+            } else if metric == .ssd {
                 StorageMetricSummary(capacity: storage, message: reading?.message)
             } else {
                 HStack(spacing: 7) {
@@ -211,7 +219,7 @@ private struct MetricSection: View {
     @ViewBuilder private var details: some View {
         if let value = reading?.value {
             switch value {
-            case .cpu:
+            case .cpu, .cooling:
                 EmptyView()
             case .memory:
                 EmptyView()

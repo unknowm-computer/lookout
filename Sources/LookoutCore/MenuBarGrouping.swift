@@ -35,7 +35,7 @@ public struct MenuBarPair: Codable, Equatable, Hashable, Sendable {
 }
 
 public struct MenuBarGrouping: Codable, Equatable, Sendable {
-    public static let eligible: [Metric] = [.cpu, .memory, .ssd, .gpu, .power]
+    public static let eligible: [Metric] = [.cpu, .memory, .ssd, .gpu, .power, .cooling]
     public private(set) var pairs: [MenuBarPair]
     public init(cpuGPU: Bool = false, memorySSD: Bool = true) {
         self.init(pairs: (cpuGPU ? [MenuBarPair(.cpu, .gpu)] : []) +

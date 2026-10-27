@@ -12,13 +12,16 @@ public struct AlertRule: Codable, Equatable, Sendable, Identifiable {
     public var recoveryThreshold: Double {
         switch metric {
         case .ssd: threshold + 5
+        case .cooling: max(0, threshold - 5)
         default: max(0, threshold - 10)
         }
     }
     public var thresholdRange: ClosedRange<Double> {
-        switch metric { case .ssd: 1...1000; default: 1...100 }
+        switch metric { case .ssd: 1...1000; case .cooling: 1...120; default: 1...100 }
     }
-    public var unit: String { metric == .ssd ? "GB" : "%" }
+    public var unit: String {
+        switch metric { case .ssd: "GB"; case .cooling: "°C"; default: "%" }
+    }
     public var condition: String {
         switch metric { case .ssd: L10n.text("미만"); default: L10n.text("이상") }
     }
@@ -42,12 +45,13 @@ public struct AlertRule: Codable, Equatable, Sendable, Identifiable {
 }
 
 public struct AlertConfiguration: Codable, Equatable, Sendable {
-    public static let supportedMetrics: [Metric] = [.cpu, .memory, .ssd, .gpu]
+    public static let supportedMetrics: [Metric] = [.cpu, .memory, .ssd, .gpu, .cooling]
     public static let defaults: [AlertRule] = [
         AlertRule(metric: .cpu, threshold: 90, duration: 30),
         AlertRule(metric: .memory, threshold: 90, duration: 60),
         AlertRule(metric: .ssd, threshold: 20, duration: 10),
-        AlertRule(metric: .gpu, threshold: 90, duration: 30)
+        AlertRule(metric: .gpu, threshold: 90, duration: 30),
+        AlertRule(metric: .cooling, threshold: 90, duration: 30)
     ]
     public var rules: [AlertRule]
     public var sound: Bool
@@ -85,10 +89,14 @@ public struct AlertEvent: Codable, Equatable, Sendable, Identifiable {
     public var title: String {
         switch metric {
         case .ssd: L10n.text("SSD 여유 공간 부족")
+        case .cooling: L10n.text("시스템 온도 높음")
         default: L10n.text("\(metric.title) 사용률 높음")
         }
     }
     public var message: String {
+        if metric == .cooling {
+            return L10n.text("온도 \(ValueFormat.temperature(value)) · 기준 \(Int(rule.threshold)) \(rule.unit) \(rule.condition)")
+        }
         let value = metric == .ssd ? String(format: "%.1f GB", value) : ValueFormat.percent(value)
         return L10n.text("\(metric == .ssd ? L10n.text("여유") : L10n.text("사용률")) \(value) · 기준 \(Int(rule.threshold)) \(rule.unit) \(rule.condition)")
     }
@@ -165,11 +173,21 @@ public struct AlertEngine: Sendable {
                 observedAt = capacity.sampledAt ?? reading.date
                 // Reusing a cached capacity is not another confirming observation.
                 if state.lastSample == sampleUptime { continue }
+            } else if case .cooling(let cooling) = reading.value {
+                sampleUptime = cooling.uptime
+                observedAt = reading.date
+                // Temperature has its own >=5s cache; repeated values do not confirm duration.
+                guard sampleUptime.isFinite, sampleUptime >= 0, sampleUptime <= uptime else {
+                    state.pendingSince = nil; state.recoverySince = nil; state.lastSample = nil
+                    state.notificationEligible = false; states[metric] = state; continue
+                }
+                if state.lastSample == sampleUptime { continue }
             } else { sampleUptime = uptime; observedAt = reading.date }
             let allowedGap: Double
             if case .storage(let capacity) = reading.value {
                 allowedGap = max(75, Double(capacity.pollingInterval) * 2.5)
-            } else { allowedGap = Double(interval) * 2.5 }
+            } else if metric == .cooling { allowedGap = Double(max(5, interval)) * 2.5 }
+            else { allowedGap = Double(interval) * 2.5 }
             if let previous = state.lastSample, sampleUptime <= previous || sampleUptime - previous > allowedGap {
                 state.pendingSince = nil; state.recoverySince = nil
             }
@@ -201,6 +219,8 @@ public struct AlertEngine: Sendable {
         case (.memory, .memory(let value)): return value.percent
         case (.gpu, .gpu(let value)): return (0...100).contains(value.utilization) ? value.utilization : nil
         case (.ssd, .storage(let value)): return value.total > 0 ? value.available / 1e9 : nil
+        case (.cooling, .cooling(let value)):
+            return [value.cpu, value.gpu].compactMap { $0 }.filter { (0...120).contains($0) }.max()
         default: return nil
         }
     }

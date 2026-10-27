@@ -3,6 +3,25 @@ import LookoutCore
 @testable import Lookout
 import Testing
 
+@Test @MainActor func temperatureAlertPersistsAndUnsupportedHardwareCannotEnableIt() throws {
+    let name = "LookoutTests.temperatureAlert.\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: name))
+    defer { defaults.removePersistentDomain(forName: name) }
+    let supported = MonitoringCapabilities(supportsGPU: true, supportsProcessEnergy: true, supportsCooling: true)
+    let store = SettingsStore(defaults: defaults, capabilities: supported)
+    #expect(!store.alerts.rule(for: .cooling).enabled)
+    store.updateAlert(.cooling) { $0.enabled = true; $0.threshold = 87; $0.duration = 60 }
+    let restored = SettingsStore(defaults: defaults, capabilities: supported)
+    #expect(restored.alerts.rule(for: .cooling) == store.alerts.rule(for: .cooling))
+    #expect(!restored.configuration.enabled.contains(.cooling))
+    let unsupported = SettingsStore(defaults: defaults,
+        capabilities: MonitoringCapabilities(supportsGPU: true, supportsProcessEnergy: true, supportsCooling: false))
+    let before = unsupported.alerts
+    unsupported.updateAlert(.cooling) { $0.enabled = false; $0.threshold = 80 }
+    #expect(unsupported.alerts == before)
+    #expect(!unsupported.alerts.hasEnabledRules(monitored: unsupported.configuration.enabled))
+}
+
 @Test @MainActor func intelFiltersSavedGPUAndEnergyButPreservesPreferencesUntilEdited() throws {
     let name = "LookoutTests.intelCapabilities.\(UUID().uuidString)"
     let defaults = try #require(UserDefaults(suiteName: name))

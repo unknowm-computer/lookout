@@ -25,7 +25,7 @@ import LookoutCore
     func stop() { task?.cancel(); task = nil; generation += 1; readings.removeAll() }
     private var requested: Set<Metric> {
         // Energy already samples processes for its main reading; the view reuses that result.
-        Set(requests.values).intersection(config.enabled).subtracting([.power])
+        Set(requests.values).intersection(config.enabled).subtracting([.power, .cooling])
     }
     private func restart() {
         stop()

@@ -25,7 +25,7 @@ import Testing
     let json = Data(#"{"version":1,"enabled":[],"order":["network","future","network","cpu"],"interval":99}"#.utf8)
     let config = try JSONDecoder().decode(SettingsRecord.self, from: json).configuration
     #expect(config.enabled.isEmpty)
-    #expect(config.order == [.network, .cpu, .memory, .ssd, .disk, .power, .gpu])
+    #expect(config.order == [.network, .cpu, .memory, .ssd, .disk, .power, .gpu, .cooling])
     #expect(config.interval == 3)
     let record = SettingsRecord(configuration: config)
     #expect(try JSONDecoder().decode(SettingsRecord.self, from: JSONEncoder().encode(record)).configuration == config)

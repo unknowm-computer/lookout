@@ -7,7 +7,7 @@ public enum ChartStyle: String, CaseIterable, Codable, Sendable, Identifiable {
         switch self { case .automatic: L10n.text("자동"); case .line: L10n.text("라인"); case .bar: L10n.text("바"); case .gauge: L10n.text("게이지") }
     }
     public static func available(for metric: Metric) -> [ChartStyle] {
-        metric == .memory ? [.automatic, .bar, .gauge] : allCases
+        metric == .cooling ? [.automatic, .line] : metric == .memory ? [.automatic, .bar, .gauge] : allCases
     }
     public func resolved(for metric: Metric) -> ChartStyle {
         if metric == .ssd { return .bar }
@@ -16,7 +16,7 @@ public enum ChartStyle: String, CaseIterable, Codable, Sendable, Identifiable {
         switch metric {
         case .cpu, .gpu: return .gauge
         case .memory, .ssd: return .bar
-        case .network, .disk, .power: return .line
+        case .network, .disk, .power, .cooling: return .line
         }
     }
 }

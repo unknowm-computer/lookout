@@ -62,8 +62,8 @@ import Testing
             let current = MenuBarRenderer.presentation(metrics: [lower, upper], readings: readings,
                 grouping: group, alerting: [upper, lower])
             #expect(empty.image.size == current.image.size)
-            #expect(current.highlightedValues.map(\.metric) == [upper, lower])
-            #expect(current.highlightedValues[0].frame.minY == 11 && current.highlightedValues[1].frame.minY == 0)
+            #expect(current.highlightedValues.map(\.metric) == [upper, lower].flatMap { $0 == .cooling ? [$0, $0] : [$0] })
+            for value in current.highlightedValues { #expect(value.frame.minY == (value.metric == upper ? 11 : 0)) }
             if [upper, lower].contains(.power) {
                 #expect(current.highlightedValues.first { $0.metric == .power }?.text == "2.5 W")
             }

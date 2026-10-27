@@ -22,7 +22,7 @@ struct ProcessListDisclosure: View {
         switch metric {
         case .cpu: L10n.text("CPU 사용률순 · 코어 1개 = 100%")
         case .memory: L10n.text("메모리 점유량순")
-        case .ssd: L10n.text("저장공간은 프로세스 목록을 제공하지 않습니다.")
+        case .ssd, .cooling: L10n.text("저장공간은 프로세스 목록을 제공하지 않습니다.")
         case .disk: L10n.text("읽기 + 쓰기 속도순 · 전체 디스크")
         case .network: L10n.text("다운로드 + 업로드 속도순 · 전체 인터페이스")
         case .gpu: L10n.text("GPU 실행 시간 비율순 · 드라이버 추정치")
@@ -86,7 +86,7 @@ struct ProcessListDisclosure: View {
         switch metric {
         case .cpu, .gpu: String(format: "%.1f%%", process.primary)
         case .memory: ValueFormat.memory(process.primary)
-        case .ssd: "—"
+        case .ssd, .cooling: "—"
         case .disk: "R \(ValueFormat.rate(process.primary))  W \(ValueFormat.rate(process.secondary ?? 0))"
         case .network: "↓ \(ValueFormat.rate(process.primary))  ↑ \(ValueFormat.rate(process.secondary ?? 0))"
         case .power: ValueFormat.watts(process.primary)

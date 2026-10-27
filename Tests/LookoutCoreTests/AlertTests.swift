@@ -158,7 +158,7 @@ private func evaluate(_ engine: inout AlertEngine, _ value: Double?, at time: Do
 @Test func alertSettingsNormalizeUnknownInvalidAndDuplicateRules() throws {
     let data = Data(#"{"rules":[{"id":"future","enabled":true,"threshold":90,"duration":1},{"id":"cpu","enabled":true,"threshold":200,"duration":-1},{"id":"cpu","enabled":false,"threshold":1,"duration":1}],"sound":true}"#.utf8)
     let configuration = try JSONDecoder().decode(AlertConfiguration.self, from: data).normalized
-    #expect(configuration.rules.count == 4 && configuration.sound)
+    #expect(configuration.rules.count == 5 && configuration.sound)
     #expect(configuration.rule(for: .cpu).threshold == 100 && configuration.rule(for: .cpu).duration == 0)
     #expect(configuration.rule(for: .cpu).enabled)
     #expect(!configuration.rule(for: .memory).enabled)

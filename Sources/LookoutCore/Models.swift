@@ -1,30 +1,31 @@
 import Foundation
 
 public enum Metric: String, CaseIterable, Codable, Sendable, Identifiable {
-    case cpu, memory, ssd, network, disk, power, gpu
+    case cpu, memory, ssd, network, disk, power, gpu, cooling
     public var id: String { rawValue }
     public var title: String {
         switch self {
         case .cpu: "CPU"; case .memory: L10n.text("메모리"); case .network: L10n.text("네트워크")
-        case .disk: L10n.text("디스크"); case .ssd: "SSD"; case .power: L10n.text("에너지"); case .gpu: "GPU"
+        case .disk: L10n.text("디스크"); case .ssd: "SSD"; case .power: L10n.text("에너지"); case .gpu: "GPU"; case .cooling: L10n.text("시스템 온도")
         }
     }
     public var symbol: String {
         switch self {
         case .cpu: "cpu"; case .memory: "memorychip"; case .network: "arrow.up.arrow.down"
-        case .disk, .ssd: "internaldrive"; case .power: "bolt.fill"; case .gpu: "square.3.layers.3d"
+        case .disk, .ssd: "internaldrive"; case .power: "bolt.fill"; case .gpu: "square.3.layers.3d"; case .cooling: "thermometer.medium"
         }
     }
     public var menuTitle: String {
         switch self {
         case .cpu: "CPU"; case .memory: "MEM"; case .network: "NET"
-        case .disk: "DISK"; case .ssd: "SSD"; case .power: "ENG"; case .gpu: "GPU"
+        case .disk: "DISK"; case .ssd: "SSD"; case .power: "ENG"; case .gpu: "GPU"; case .cooling: "TEMP"
         }
     }
 }
 
 public struct MonitorConfiguration: Equatable, Sendable {
     public static let defaultInterval = 3
+    public static let defaultEnabled = Set(Metric.allCases).subtracting([.cooling])
     public var enabled: Set<Metric>
     public var order: [Metric]
     public var interval: Int
@@ -33,7 +34,7 @@ public struct MonitorConfiguration: Equatable, Sendable {
     public var menuBarGrouping: MenuBarGrouping
     public var networkRateBasis: ActivityRateBasis
     public var diskRateBasis: ActivityRateBasis
-    public init(enabled: Set<Metric> = Set(Metric.allCases), order: [Metric] = Metric.allCases,
+    public init(enabled: Set<Metric> = MonitorConfiguration.defaultEnabled, order: [Metric] = Metric.allCases,
                 interval: Int = MonitorConfiguration.defaultInterval, interface: String? = nil, storageInterval: Int = 30,
                 menuBarGrouping: MenuBarGrouping = MenuBarGrouping(),
                 networkRateBasis: ActivityRateBasis = .data, diskRateBasis: ActivityRateBasis = .data) {
@@ -47,8 +48,10 @@ public struct MonitorConfiguration: Equatable, Sendable {
         self.networkRateBasis = networkRateBasis; self.diskRateBasis = diskRateBasis
     }
     public var visible: [Metric] { order.filter { enabled.contains($0) } }
-    /// Detail panels follow group placement and show the upper member before its partner.
-    public var detailMetrics: [Metric] { menuBarGrouping.units(metrics: visible).flatMap(\.metrics) }
+    /// Full details follow Monitoring order; a selected menu-bar group keeps its own row order.
+    public func detailMetrics(selected: [Metric]? = nil) -> [Metric] {
+        selected?.filter { enabled.contains($0) } ?? visible
+    }
     public var needsStorageCapacity: Bool {
         enabled.contains(.ssd)
     }
@@ -77,7 +80,7 @@ public struct SettingsRecord: Codable, Sendable {
         diskRateBasis = configuration.diskRateBasis.rawValue
     }
     public var configuration: MonitorConfiguration {
-        var selected = enabled.map { Set($0.compactMap(Metric.init(rawValue:))) } ?? Set(Metric.allCases)
+        var selected = enabled.map { Set($0.compactMap(Metric.init(rawValue:))) } ?? MonitorConfiguration.defaultEnabled
         var placement = order?.compactMap(Metric.init(rawValue:)) ?? Metric.allCases
         if version < 2, !selected.contains(.ssd) {
             if selected.contains(.memory), showsMemoryStorage ?? true { selected.insert(.ssd) }
@@ -199,10 +202,11 @@ public enum ReadingValue: Sendable {
     case disk(DiskReading)
     case power(PowerReading)
     case gpu(GPUReading)
+    case cooling(CoolingReading)
     public var primary: Double? {
         switch self {
         case .cpu(let value): value; case .memory(let value): value.percent; case .storage(let value): value.percent; case .network(let value): value.download
-        case .disk(let value): value.activity?.read; case .power(let value): value.watts; case .gpu(let value): value.utilization
+        case .disk(let value): value.activity?.read; case .power(let value): value.watts; case .gpu(let value): value.utilization; case .cooling(let value): value.temperature
         }
     }
     public var secondary: Double? {
@@ -236,11 +240,19 @@ public struct HistoryBuffer: Sendable {
     private var previousDate: Date?
     public init() {}
     public mutating func append(_ reading: MetricReading, interval: Int) {
+        // Cooling history stores the two thermal zones independently; the live
+        // ReadingValue.primary remains the hotter zone for menu-bar display/control.
+        let primary: Double?, secondary: Double?
+        if case .cooling(let cooling) = reading.value {
+            primary = cooling.cpu; secondary = cooling.gpu
+        } else {
+            primary = reading.value?.primary; secondary = reading.value?.secondary
+        }
         if reading.value?.primary == nil || previousDate.map({ reading.date.timeIntervalSince($0) > Double(interval) * 2.5 }) == true {
             segment += 1
         }
-        points.append(HistoryPoint(id: UUID(), date: reading.date, primary: reading.value?.primary,
-                                   secondary: reading.value?.secondary, segment: segment))
+        points.append(HistoryPoint(id: UUID(), date: reading.date, primary: primary,
+                                   secondary: secondary, segment: segment))
         previousDate = reading.date
         prune(at: reading.date)
     }

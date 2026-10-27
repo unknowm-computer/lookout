@@ -142,14 +142,20 @@ public enum SystemMetrics {
 
 public actor MetricSampler {
     private var energyCollector = EnergyCollector()
+    private let coolingCollector: any CoolingSampling
     private var diskState = DiskSamplingState()
     private var previousCPU: CPUTicks?
     private var previousNetwork: NetworkCounter?
     private var configuration = MonitorConfiguration(enabled: [])
     private var counts: [Metric: Int] = [:]
     private let capabilities: MonitoringCapabilities
-    public init(capabilities: MonitoringCapabilities = .current) { self.capabilities = capabilities }
-    public func reset() { previousCPU = nil; previousNetwork = nil; diskState.reset(); energyCollector.reset() }
+    public init(capabilities: MonitoringCapabilities = .current) {
+        self.capabilities = capabilities; coolingCollector = CoolingCollector()
+    }
+    init(capabilities: MonitoringCapabilities, coolingCollector: sending any CoolingSampling) {
+        self.capabilities = capabilities; self.coolingCollector = coolingCollector
+    }
+    public func reset() { previousCPU = nil; previousNetwork = nil; diskState.reset(); energyCollector.reset(); coolingCollector.reset() }
     public func invocationCounts() -> [Metric: Int] { counts }
     public func collect(_ config: MonitorConfiguration, date: Date = Date()) -> [MetricReading] {
         let config = capabilities.applying(to: config)
@@ -157,6 +163,7 @@ public actor MetricSampler {
         if !config.enabled.contains(.network) || config.interface != configuration.interface { previousNetwork = nil }
         if !config.needsStorageCapacity && !config.enabled.contains(.disk) { diskState.reset() }
         if !config.enabled.contains(.power) { energyCollector.reset() }
+        if !config.enabled.contains(.cooling) { coolingCollector.reset() }
         configuration = config
         // SSD capacity and disk I/O have independent demand and polling intervals.
         let disk = !config.needsStorageCapacity && !config.enabled.contains(.disk) ? nil :
@@ -168,6 +175,10 @@ public actor MetricSampler {
             counts[metric, default: 0] += 1
             do {
                 switch metric {
+                case .cooling:
+                    do { return MetricReading(metric: metric, date: date,
+                        value: .cooling(try coolingCollector.sample(uptime: ProcessInfo.processInfo.systemUptime, force: false))) }
+                    catch { return MetricReading(metric: metric, date: date, value: nil, message: L10n.text("온도와 팬 정보를 읽을 수 없습니다.")) }
                 case .cpu:
                     let current = try SystemMetrics.cpu()
                     let value = previousCPU.flatMap { current.usage(since: $0) }

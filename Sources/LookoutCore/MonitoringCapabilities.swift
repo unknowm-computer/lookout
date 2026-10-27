@@ -1,27 +1,31 @@
 /// Platform availability is applied after loading preferences, without erasing saved choices.
 public struct MonitoringCapabilities: Sendable {
+    public let supportsCooling: Bool
     public let supportsGPU: Bool
     public let supportsProcessEnergy: Bool
-    public init(supportsGPU: Bool, supportsProcessEnergy: Bool) {
+    public init(supportsGPU: Bool, supportsProcessEnergy: Bool, supportsCooling: Bool = false) {
+        self.supportsCooling = supportsCooling
         self.supportsGPU = supportsGPU
         self.supportsProcessEnergy = supportsProcessEnergy
     }
     public static var current: Self {
         #if arch(arm64)
-        Self(supportsGPU: true, supportsProcessEnergy: true)
+        Self(supportsGPU: true, supportsProcessEnergy: true, supportsCooling: CoolingHardware.isM1ProMacBook)
         #else
         Self(supportsGPU: false, supportsProcessEnergy: false)
         #endif
     }
     public func supports(_ metric: Metric) -> Bool {
         switch metric {
+        case .cooling: supportsCooling
         case .gpu: supportsGPU
         case .power: supportsProcessEnergy
         default: true
         }
     }
     public func unsupportedReason(for metric: Metric) -> String? {
-        supports(metric) ? nil : L10n.text("Intel Mac에서는 \(metric.title) 모니터링을 지원하지 않습니다.")
+        if metric == .cooling { return supportsCooling ? nil : L10n.text("시스템 온도는 M1 Pro 맥북에서 우선 지원합니다.") }
+        return supports(metric) ? nil : L10n.text("Intel Mac에서는 \(metric.title) 모니터링을 지원하지 않습니다.")
     }
     public func applying(to configuration: MonitorConfiguration) -> MonitorConfiguration {
         var result = configuration

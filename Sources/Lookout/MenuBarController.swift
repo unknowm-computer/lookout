@@ -235,6 +235,7 @@ import SwiftUI
                 text = "\(settings.menuBarValues.storage.title) \(settings.menuBarValues.text(for: .ssd, value: value))"
             case .network(let network): text = L10n.text("다운로드 \(network.basis.format(network.download, for: .network)), 업로드 \(network.basis.format(network.upload, for: .network))")
             case .disk(let disk): text = L10n.text("읽기 \(disk.activity.map { $0.basis.format($0.read, for: .disk) } ?? "—"), 쓰기 \(disk.activity.map { $0.basis.format($0.write, for: .disk) } ?? "—")")
+            case .cooling(let cooling): text = "CPU \(cooling.cpu.map(ValueFormat.temperature) ?? "—") · GPU \(cooling.gpu.map(ValueFormat.temperature) ?? "—") · \(cooling.band.title)"
             case .power(let energy): text = energy.watts.map(ValueFormat.watts) ?? "—"
             default: text = value?.primary.map(ValueFormat.percent) ?? "—"
             }

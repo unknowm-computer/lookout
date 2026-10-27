@@ -11,6 +11,7 @@ import LookoutCore
     let settings: SettingsStore
     let processDetails: ProcessDetailsStore
     let notifications = NotificationService()
+    let coolingControl = CoolingControlService()
     private let sampler = MetricSampler()
     private var alertEngine: AlertEngine
     private var savedAlertIDs: Set<UUID>
@@ -35,7 +36,10 @@ import LookoutCore
             self.publishAlerts(sound: configuration.sound)
         }.store(in: &subscriptions)
         NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification).sink { [weak self] _ in
-            Task { @MainActor in await self?.notifications.refreshAuthorization() }
+            Task { @MainActor in
+                if self?.settings.capabilities.supports(.cooling) == true { self?.coolingControl.prepareHelperAfterUpdate() }
+                await self?.notifications.refreshAuthorization()
+            }
         }.store(in: &subscriptions)
         let center = NSWorkspace.shared.notificationCenter
         center.publisher(for: NSWorkspace.willSleepNotification).sink { [weak self] _ in
@@ -46,9 +50,11 @@ import LookoutCore
         }.store(in: &subscriptions)
         alertEngine.configure(settings.alerts, monitored: settings.configuration.enabled)
         publishAlerts()
+        if settings.capabilities.supports(.cooling) { coolingControl.prepareHelperAfterUpdate() }
         restart()
     }
     private func reconfigure(_ config: MonitorConfiguration) {
+        if !config.enabled.contains(.cooling) { coolingControl.stop() }
         processDetails.configure(config)
         let enabledChanged = config.enabled != previousConfig.enabled
         for metric in Metric.allCases where !config.enabled.contains(metric) {
@@ -82,6 +88,10 @@ import LookoutCore
                         self.histories[reading.metric, default: HistoryBuffer()].append(reading, interval: config.interval)
                     }
                 }
+                let cooling = results.first { $0.metric == .cooling }.flatMap { reading -> CoolingReading? in
+                    if case .cooling(let value) = reading.value { return value }; return nil
+                }
+                self.coolingControl.pulse(reading: cooling, enabled: config.enabled.contains(.cooling))
                 self.alertEngine.evaluate(results, configuration: self.settings.alerts, monitored: config.enabled,
                                           uptime: ProcessInfo.processInfo.systemUptime, interval: config.interval)
                 self.publishAlerts()
@@ -94,12 +104,15 @@ import LookoutCore
     }
     private func sleep() {
         processDetails.suspend()
+        coolingControl.stop()
         sleeping = true; task?.cancel(); generation += 1
         alertEngine.breakContinuity()
         publishAlerts()
         for metric in histories.keys { histories[metric]?.breakContinuity() }
     }
     private func wake() {
+        coolingControl.prepareToResume()
+        if settings.capabilities.supports(.cooling) { coolingControl.prepareHelperAfterUpdate() }
         processDetails.resume()
         sleeping = false; readings.removeAll()
         for metric in histories.keys { histories[metric]?.prune(at: Date()) }
@@ -119,6 +132,7 @@ import LookoutCore
         }
     }
     func stop() {
+        coolingControl.stop()
         processDetails.stop()
         task?.cancel(); generation += 1
         notifications.synchronize(active: activeAlerts, sound: settings.alerts.sound, eligible: [])

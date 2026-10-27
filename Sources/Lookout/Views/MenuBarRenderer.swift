@@ -14,6 +14,9 @@ import LookoutCore
         var pairedIndicators = false
         var metric: Metric? = nil
         var lowerMetric: Metric? = nil
+        var symbol: String? = nil
+        var inlineCooling = false
+        var coolingLeadingWidth: CGFloat = 0
     }
 
     struct HighlightedValue {
@@ -22,6 +25,13 @@ import LookoutCore
         let frame: NSRect
         let font: NSFont
         let alignment: NSTextAlignment
+        var color: NSColor = .systemRed
+    }
+
+    struct ColoredSymbol {
+        let image: NSImage
+        let frame: NSRect
+        let color: NSColor
     }
 
     struct Presentation {
@@ -30,10 +40,16 @@ import LookoutCore
         let pressureFrame: NSRect?
         let storageFrame: NSRect?
         let highlightedValues: [HighlightedValue]
+        let coloredSymbols: [ColoredSymbol]
     }
 
     private static let font = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular)
     private static let networkFont = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .medium)
+    private static let coolingInlineFont = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .medium)
+    private static let coolingIconWidth: CGFloat = 9
+    private static let coolingIconGap: CGFloat = 3
+    private static let coolingTemperatureWidth = width("120°", font: coolingInlineFont)
+    private static let coolingInlineWidth = 2 * (coolingIconWidth + coolingIconGap + coolingTemperatureWidth) + 16
     private static let height: CGFloat = 22
     private static let metricGap: CGFloat = 12
     private static let percentWidth = width("100%")
@@ -61,14 +77,16 @@ import LookoutCore
             if !cells.isEmpty { cells.append(Cell(text: "", width: compact ? 4 : metricGap)) }
             if unit.metrics.count == 2 {
                 let upper = unit.metrics[0], lower = unit.metrics[1]
-                cells.append(Cell(text: upper.menuTitle,
-                    width: max(width(upper.menuTitle, font: networkFont), width(lower.menuTitle, font: networkFont)) + 4,
-                    alignment: .left, lowerText: lower.menuTitle))
+                let hasCooling = upper == .cooling || lower == .cooling
+                let labelWidth = max(upper == .cooling ? 0 : width(upper.menuTitle, font: networkFont),
+                                     lower == .cooling ? 0 : width(lower.menuTitle, font: networkFont)) + 4
+                cells.append(Cell(text: upper == .cooling ? "" : upper.menuTitle,
+                    width: labelWidth, alignment: .left, lowerText: lower == .cooling ? "" : lower.menuTitle))
                 cells.append(Cell(text: text(metric: upper, value: readings[upper]?.value, values: values),
-                    width: max(valueWidth(metric: upper, values: values, font: networkFont),
-                               valueWidth(metric: lower, values: values, font: networkFont)),
+                    width: max(upper == .cooling ? coolingInlineWidth - labelWidth : valueWidth(metric: upper, values: values, font: networkFont),
+                               lower == .cooling ? coolingInlineWidth - labelWidth : valueWidth(metric: lower, values: values, font: networkFont)),
                     lowerText: text(metric: lower, value: readings[lower]?.value, values: values),
-                    metric: upper, lowerMetric: lower))
+                    metric: upper, lowerMetric: lower, inlineCooling: hasCooling, coolingLeadingWidth: hasCooling ? labelWidth : 0))
                 let pressureRow: Bool? = upper == .memory ? true : (lower == .memory ? false : nil)
                 let storageRow: Bool? = values.storage.capacity == .used ? nil :
                     (upper == .ssd ? false : (lower == .ssd ? true : nil))
@@ -81,6 +99,12 @@ import LookoutCore
             let metric = unit.metrics[0]
             let value = readings[metric]?.value
             switch metric {
+            case .cooling:
+                cells.append(Cell(text: "", width: 20, metric: metric, symbol: metric.symbol))
+                cells.append(Cell(text: "CPU", width: max(width("CPU", font: networkFont), width("GPU", font: networkFont)) + 4,
+                                  alignment: .left, lowerText: "GPU"))
+                cells.append(Cell(text: coolingTemperature(value, cpu: true), width: width("120°C", font: networkFont),
+                                  lowerText: coolingTemperature(value, cpu: false), metric: metric, lowerMetric: metric))
             case .cpu, .gpu:
                 cells += percentCells(metric: metric, value: value?.primary, compact: compact)
             case .memory, .ssd:
@@ -110,7 +134,7 @@ import LookoutCore
         }
 
         // Paired units and rate labels identify themselves.
-        let labeledMetrics: [Metric] = [.network, .disk]
+        let labeledMetrics: [Metric] = [.network, .disk, .cooling]
         let symbolMetric = compact && metrics.count == 1 && !labeledMetrics.contains(metrics[0]) ? metrics[0] : nil
         let symbolWidth: CGFloat = symbolMetric == nil ? 0 : 20
         let image = NSImage(size: NSSize(width: symbolWidth + cells.reduce(0) { $0 + $1.width }, height: height))
@@ -126,7 +150,21 @@ import LookoutCore
         var pressureFrame: NSRect?
         var storageFrame: NSRect?
         var highlightedValues: [HighlightedValue] = []
+        var coloredSymbols: [ColoredSymbol] = []
+        let coolingColor: NSColor? = {
+            if alerting.contains(.cooling) { return .systemRed }
+            guard case .cooling(let value) = readings[.cooling]?.value else { return nil }
+            switch value.band { case .normal: return nil; case .warm: return .systemOrange; case .hot: return .systemRed }
+        }()
         for cell in cells {
+            if let symbolName = cell.symbol, let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: Metric.cooling.title) {
+                let configured = symbol.withSymbolConfiguration(.init(pointSize: 13, weight: .regular)) ?? symbol
+                let ratio = min(16 / configured.size.width, 16 / configured.size.height)
+                let size = NSSize(width: configured.size.width * ratio, height: configured.size.height * ratio)
+                let frame = NSRect(x: x + (cell.width - size.width) / 2, y: (height - size.height) / 2, width: size.width, height: size.height)
+                if let coolingColor { coloredSymbols.append(ColoredSymbol(image: configured, frame: frame, color: coolingColor)) }
+                else { configured.draw(in: frame) }
+            }
             if let upperRow = cell.pressureRow {
                 let y: CGFloat = cell.pairedIndicators ? (upperRow ? 14 : 3) : 8
                 pressureFrame = NSRect(x: x + 3, y: y, width: 6, height: 6)
@@ -136,12 +174,41 @@ import LookoutCore
                 storageFrame = NSRect(x: x + 3, y: y, width: 6, height: 6)
             }
             func drawRow(_ text: String, metric: Metric?, font: NSFont, bottom: CGFloat, rowHeight: CGFloat) {
-                if let metric, alerting.contains(metric), !text.isEmpty {
+                if metric == .cooling && cell.inlineCooling {
+                    let rowStart = x - cell.coolingLeadingWidth
+                    let rowWidth = cell.width + cell.coolingLeadingWidth
+                    let itemWidth = coolingIconWidth + coolingIconGap + coolingTemperatureWidth
+                    for (index, sensor) in [Metric.cpu, .gpu].enumerated() {
+                        let itemX = rowStart + (index == 0 ? 0 : rowWidth - itemWidth)
+                        if let symbol = NSImage(systemSymbolName: sensor.symbol, accessibilityDescription: sensor.title) {
+                            let configured = symbol.withSymbolConfiguration(.init(pointSize: 9, weight: .regular)) ?? symbol
+                            let scale = min(coolingIconWidth / configured.size.width, coolingIconWidth / configured.size.height)
+                            let size = NSSize(width: configured.size.width * scale, height: configured.size.height * scale)
+                            let frame = NSRect(x: itemX + (coolingIconWidth - size.width) / 2,
+                                               y: bottom + (rowHeight - size.height) / 2, width: size.width, height: size.height)
+                            if let coolingColor { coloredSymbols.append(ColoredSymbol(image: configured, frame: frame, color: coolingColor)) }
+                            else { configured.draw(in: frame) }
+                        }
+                        let temperature = coolingTemperature(readings[.cooling]?.value, cpu: sensor == .cpu, inline: true)
+                        let frame = NSRect(x: itemX + coolingIconWidth + coolingIconGap, y: bottom,
+                                           width: coolingTemperatureWidth, height: rowHeight)
+                        if coolingColor != nil || alerting.contains(.cooling) {
+                            highlightedValues.append(HighlightedValue(metric: .cooling, text: temperature, frame: frame,
+                                font: coolingInlineFont, alignment: .right, color: coolingColor ?? .systemRed))
+                        } else {
+                            draw(temperature, cell: Cell(text: temperature, width: frame.width), font: coolingInlineFont,
+                                 x: frame.minX, bottom: bottom, rowHeight: rowHeight)
+                        }
+                    }
+                    return
+                }
+                let rowFont = font
+                if let metric, (alerting.contains(metric) || metric == .cooling && coolingColor != nil), !text.isEmpty {
                     highlightedValues.append(HighlightedValue(metric: metric, text: text,
                         frame: NSRect(x: x, y: bottom, width: cell.width, height: rowHeight),
-                        font: font, alignment: cell.alignment))
+                        font: rowFont, alignment: cell.alignment, color: metric == .cooling ? coolingColor ?? .systemRed : .systemRed))
                 } else {
-                    draw(text, cell: cell, font: font, x: x, bottom: bottom, rowHeight: rowHeight)
+                    draw(text, cell: cell, font: rowFont, x: x, bottom: bottom, rowHeight: rowHeight)
                 }
             }
             if let lowerText = cell.lowerText {
@@ -155,15 +222,17 @@ import LookoutCore
         image.unlockFocus()
         image.isTemplate = true
         return Presentation(image: image, pressureFrame: pressureFrame, storageFrame: storageFrame,
-                            highlightedValues: highlightedValues)
+                            highlightedValues: highlightedValues, coloredSymbols: coloredSymbols)
     }
 
     private static func text(metric: Metric, value: ReadingValue?, values: MenuBarValuePreferences) -> String {
         if metric == .memory || metric == .ssd { return values.text(for: metric, value: value) }
+        if metric == .cooling { return "" } // The grouped row draws two independent icon/value slots.
         if metric == .power { return value?.primary.map(ValueFormat.watts) ?? "—" }
         return value?.primary.map(ValueFormat.percent) ?? "—"
     }
     private static func valueWidth(metric: Metric, values: MenuBarValuePreferences, font: NSFont) -> CGFloat {
+        if metric == .cooling { return coolingInlineWidth }
         if metric == .power { return width("999.9 W", font: font) }
         guard metric == .memory || metric == .ssd, !values.mode(for: metric).isPercentage else {
             return width("100%", font: font)
@@ -172,6 +241,12 @@ import LookoutCore
         let templates = metric == .memory ? ["9999.9 GiB", "9999.9 MiB"]
             : ["9999 GB", "9999 TB", "99.9 GB", "99.9 TB", "999 MB", "99.9 MB", "99.9 KB"]
         return templates.map { width($0, font: font) }.max()!
+    }
+
+    private static func coolingTemperature(_ value: ReadingValue?, cpu: Bool, inline: Bool = false) -> String {
+        guard case .cooling(let cooling) = value, let temperature = cpu ? cooling.cpu : cooling.gpu else { return "—" }
+        let text = ValueFormat.temperature(temperature)
+        return inline ? text.replacingOccurrences(of: "°C", with: "°") : text
     }
 
     private static func percentCells(metric: Metric, value: Double?, compact: Bool) -> [Cell] {
