@@ -28,17 +28,31 @@ public enum CapacityMenuBarValue: String, CaseIterable, Codable, Sendable, Ident
     }
 }
 
+public enum TemperatureMenuBarValue: String, CaseIterable, Codable, Sendable, Identifiable {
+    case both, cpu, gpu
+    public var id: Self { self }
+    public var title: String {
+        switch self { case .both: L10n.text("둘 다"); case .cpu: "CPU"; case .gpu: "GPU" }
+    }
+    public var metrics: [Metric] {
+        switch self { case .both: [.cpu, .gpu]; case .cpu: [.cpu]; case .gpu: [.gpu] }
+    }
+}
+
 /// Display-only preferences must not restart collectors or change alert thresholds.
 public struct MenuBarValuePreferences: Codable, Equatable, Sendable {
     public var memory: CapacityMenuBarValue
     public var storage: CapacityMenuBarValue
-    public init(memory: CapacityMenuBarValue = .percentage, storage: CapacityMenuBarValue = .available) {
-        self.memory = memory; self.storage = storage
+    public var temperature: TemperatureMenuBarValue
+    public init(memory: CapacityMenuBarValue = .percentage, storage: CapacityMenuBarValue = .available,
+                temperature: TemperatureMenuBarValue = .both) {
+        self.memory = memory; self.storage = storage; self.temperature = temperature
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         memory = (try? values.decode(CapacityMenuBarValue.self, forKey: .memory)) ?? .percentage
         storage = (try? values.decode(CapacityMenuBarValue.self, forKey: .storage)) ?? .available
+        temperature = (try? values.decode(TemperatureMenuBarValue.self, forKey: .temperature)) ?? .both
     }
     public func mode(for metric: Metric) -> CapacityMenuBarValue {
         metric == .ssd ? storage : memory

@@ -12,6 +12,7 @@ import LookoutCore
     let processDetails: ProcessDetailsStore
     let notifications = NotificationService()
     let coolingControl = CoolingControlService()
+    let windowLayout = WindowLayoutClient()
     private let sampler = MetricSampler()
     private var alertEngine: AlertEngine
     private var savedAlertIDs: Set<UUID>
@@ -37,7 +38,7 @@ import LookoutCore
         }.store(in: &subscriptions)
         NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification).sink { [weak self] _ in
             Task { @MainActor in
-                if self?.settings.capabilities.supports(.cooling) == true { self?.coolingControl.prepareHelperAfterUpdate() }
+                if self?.settings.capabilities.supports(.cooling) == true { self?.coolingControl.refresh() }
                 await self?.notifications.refreshAuthorization()
             }
         }.store(in: &subscriptions)
@@ -50,11 +51,12 @@ import LookoutCore
         }.store(in: &subscriptions)
         alertEngine.configure(settings.alerts, monitored: settings.configuration.enabled)
         publishAlerts()
-        if settings.capabilities.supports(.cooling) { coolingControl.prepareHelperAfterUpdate() }
+        if settings.capabilities.supports(.cooling) { coolingControl.refresh() }
         restart()
     }
     private func reconfigure(_ config: MonitorConfiguration) {
         if !config.enabled.contains(.cooling) { coolingControl.stop() }
+        else if !previousConfig.enabled.contains(.cooling) { coolingControl.prepareToResume() }
         processDetails.configure(config)
         let enabledChanged = config.enabled != previousConfig.enabled
         for metric in Metric.allCases where !config.enabled.contains(metric) {
@@ -112,7 +114,7 @@ import LookoutCore
     }
     private func wake() {
         coolingControl.prepareToResume()
-        if settings.capabilities.supports(.cooling) { coolingControl.prepareHelperAfterUpdate() }
+        if settings.capabilities.supports(.cooling) { coolingControl.refresh() }
         processDetails.resume()
         sleeping = false; readings.removeAll()
         for metric in histories.keys { histories[metric]?.prune(at: Date()) }
@@ -132,6 +134,7 @@ import LookoutCore
         }
     }
     func stop() {
+        windowLayout.stop()
         coolingControl.stop()
         processDetails.stop()
         task?.cancel(); generation += 1

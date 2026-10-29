@@ -62,6 +62,11 @@ import LookoutCore
         guard next != menuBarValues, let data = try? JSONEncoder().encode(next) else { return }
         defaults.set(data, forKey: "menuBarValues.v1"); menuBarValues = next
     }
+    func setTemperatureMenuBarValue(_ value: TemperatureMenuBarValue) {
+        var next = menuBarValues; next.temperature = value
+        guard next != menuBarValues, let data = try? JSONEncoder().encode(next) else { return }
+        defaults.set(data, forKey: "menuBarValues.v1"); menuBarValues = next
+    }
     func setMenuBarCapacity(_ capacity: CapacityMenuBarValue, for metric: Metric) {
         setMenuBarValue(CapacityMenuBarValue(capacity: capacity,
             percentage: menuBarValues.mode(for: metric).isPercentage), for: metric)

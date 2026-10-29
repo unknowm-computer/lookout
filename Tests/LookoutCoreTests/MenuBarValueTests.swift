@@ -82,3 +82,14 @@ import Testing
     #expect(memory.percent == 99 && memory.pressure == .normal && memory.available == 1)
     #expect(MemoryReading(total: 100, app: 110, wired: 0, compressed: 0, swap: nil).available == 0)
 }
+
+@Test func temperatureMenuPreferenceMigratesAndDecodesIndependently() throws {
+    for json in [#"{"memory":"used","storage":"available"}"#, #"{"memory":"used","storage":"available","temperature":"future"}"#] {
+        let value = try JSONDecoder().decode(MenuBarValuePreferences.self, from: Data(json.utf8))
+        #expect(value.temperature == .both && value.memory == .used && value.storage == .available)
+    }
+    for selection in TemperatureMenuBarValue.allCases {
+        let value = MenuBarValuePreferences(temperature: selection)
+        #expect(try JSONDecoder().decode(MenuBarValuePreferences.self, from: JSONEncoder().encode(value)) == value)
+    }
+}

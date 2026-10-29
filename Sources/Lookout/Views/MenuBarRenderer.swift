@@ -49,7 +49,10 @@ import LookoutCore
     private static let coolingIconWidth: CGFloat = 9
     private static let coolingIconGap: CGFloat = 3
     private static let coolingTemperatureWidth = width("120°", font: coolingInlineFont)
-    private static let coolingInlineWidth = 2 * (coolingIconWidth + coolingIconGap + coolingTemperatureWidth) + 16
+    private static func coolingInlineWidth(_ selection: TemperatureMenuBarValue) -> CGFloat {
+        CGFloat(selection.metrics.count) * (coolingIconWidth + coolingIconGap + coolingTemperatureWidth)
+            + (selection == .both ? 16 : 0)
+    }
     private static let height: CGFloat = 22
     private static let metricGap: CGFloat = 12
     private static let percentWidth = width("100%")
@@ -83,8 +86,8 @@ import LookoutCore
                 cells.append(Cell(text: upper == .cooling ? "" : upper.menuTitle,
                     width: labelWidth, alignment: .left, lowerText: lower == .cooling ? "" : lower.menuTitle))
                 cells.append(Cell(text: text(metric: upper, value: readings[upper]?.value, values: values),
-                    width: max(upper == .cooling ? coolingInlineWidth - labelWidth : valueWidth(metric: upper, values: values, font: networkFont),
-                               lower == .cooling ? coolingInlineWidth - labelWidth : valueWidth(metric: lower, values: values, font: networkFont)),
+                    width: max(upper == .cooling ? coolingInlineWidth(values.temperature) - labelWidth : valueWidth(metric: upper, values: values, font: networkFont),
+                               lower == .cooling ? coolingInlineWidth(values.temperature) - labelWidth : valueWidth(metric: lower, values: values, font: networkFont)),
                     lowerText: text(metric: lower, value: readings[lower]?.value, values: values),
                     metric: upper, lowerMetric: lower, inlineCooling: hasCooling, coolingLeadingWidth: hasCooling ? labelWidth : 0))
                 let pressureRow: Bool? = upper == .memory ? true : (lower == .memory ? false : nil)
@@ -100,11 +103,17 @@ import LookoutCore
             let value = readings[metric]?.value
             switch metric {
             case .cooling:
-                cells.append(Cell(text: "", width: 20, metric: metric, symbol: metric.symbol))
-                cells.append(Cell(text: "CPU", width: max(width("CPU", font: networkFont), width("GPU", font: networkFont)) + 4,
-                                  alignment: .left, lowerText: "GPU"))
-                cells.append(Cell(text: coolingTemperature(value, cpu: true), width: width("120°C", font: networkFont),
-                                  lowerText: coolingTemperature(value, cpu: false), metric: metric, lowerMetric: metric))
+                if values.temperature == .both {
+                    cells.append(Cell(text: "", width: 20, metric: metric, symbol: metric.symbol))
+                    cells.append(Cell(text: "CPU", width: max(width("CPU", font: networkFont), width("GPU", font: networkFont)) + 4,
+                                      alignment: .left, lowerText: "GPU"))
+                    cells.append(Cell(text: coolingTemperature(value, cpu: true), width: width("120°C", font: networkFont),
+                                      lowerText: coolingTemperature(value, cpu: false), metric: metric, lowerMetric: metric))
+                } else {
+                    let sensor: Metric = values.temperature == .cpu ? .cpu : .gpu
+                    cells.append(Cell(text: "", width: 20, metric: metric, symbol: sensor.symbol))
+                    cells.append(Cell(text: coolingTemperature(value, cpu: sensor == .cpu), width: width("120°C"), metric: metric))
+                }
             case .cpu, .gpu:
                 cells += percentCells(metric: metric, value: value?.primary, compact: compact)
             case .memory, .ssd:
@@ -178,7 +187,7 @@ import LookoutCore
                     let rowStart = x - cell.coolingLeadingWidth
                     let rowWidth = cell.width + cell.coolingLeadingWidth
                     let itemWidth = coolingIconWidth + coolingIconGap + coolingTemperatureWidth
-                    for (index, sensor) in [Metric.cpu, .gpu].enumerated() {
+                    for (index, sensor) in values.temperature.metrics.enumerated() {
                         let itemX = rowStart + (index == 0 ? 0 : rowWidth - itemWidth)
                         if let symbol = NSImage(systemSymbolName: sensor.symbol, accessibilityDescription: sensor.title) {
                             let configured = symbol.withSymbolConfiguration(.init(pointSize: 9, weight: .regular)) ?? symbol
@@ -190,8 +199,8 @@ import LookoutCore
                             else { configured.draw(in: frame) }
                         }
                         let temperature = coolingTemperature(readings[.cooling]?.value, cpu: sensor == .cpu, inline: true)
-                        let frame = NSRect(x: itemX + coolingIconWidth + coolingIconGap, y: bottom,
-                                           width: coolingTemperatureWidth, height: rowHeight)
+                        let valueX = values.temperature == .both ? itemX + coolingIconWidth + coolingIconGap : rowStart + rowWidth - coolingTemperatureWidth
+                        let frame = NSRect(x: valueX, y: bottom, width: coolingTemperatureWidth, height: rowHeight)
                         if coolingColor != nil || alerting.contains(.cooling) {
                             highlightedValues.append(HighlightedValue(metric: .cooling, text: temperature, frame: frame,
                                 font: coolingInlineFont, alignment: .right, color: coolingColor ?? .systemRed))
@@ -227,12 +236,12 @@ import LookoutCore
 
     private static func text(metric: Metric, value: ReadingValue?, values: MenuBarValuePreferences) -> String {
         if metric == .memory || metric == .ssd { return values.text(for: metric, value: value) }
-        if metric == .cooling { return "" } // The grouped row draws two independent icon/value slots.
+        if metric == .cooling { return "" } // The grouped row draws the selected sensor icon/value slots.
         if metric == .power { return value?.primary.map(ValueFormat.watts) ?? "—" }
         return value?.primary.map(ValueFormat.percent) ?? "—"
     }
     private static func valueWidth(metric: Metric, values: MenuBarValuePreferences, font: NSFont) -> CGFloat {
-        if metric == .cooling { return coolingInlineWidth }
+        if metric == .cooling { return coolingInlineWidth(values.temperature) }
         if metric == .power { return width("999.9 W", font: font) }
         guard metric == .memory || metric == .ssd, !values.mode(for: metric).isPercentage else {
             return width("100%", font: font)

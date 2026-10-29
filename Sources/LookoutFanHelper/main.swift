@@ -1,7 +1,7 @@
 import Darwin
 import FanControlProtocol
 import Foundation
-import LookoutCore
+import FanSupport
 import MachO
 import OSLog
 import SystemConfiguration

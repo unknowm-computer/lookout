@@ -8,82 +8,98 @@ import ServiceManagement
 @MainActor final class CoolingControlService: ObservableObject {
     @Published private(set) var appliedMode = CoolingMode.system
     @Published private var changingMode = false
+    @Published private var verifyingSetup = false
     @Published private(set) var message: String?
-    var busy: Bool { changingMode || maintenance.updating }
+    var busy: Bool { changingMode || verifyingSetup || maintenance.updating }
     var registration: SMAppService.Status { maintenance.status }
     var needsRefresh: Bool { maintenance.needsRefresh }
     var updatingHelper: Bool { maintenance.updating }
     var helperError: String? { maintenance.error }
-    var helperPreviouslyEnabled: Bool { maintenance.previouslyEnabled }
     private let maintenance: FanHelperMaintenance
-    private var maintenanceSubscription: AnyCancellable?
+    private var maintenanceSubscriptions: Set<AnyCancellable> = []
+    private var verifyAfterSetup = false
     private let connectionFactory: (@MainActor () throws -> (NSXPCConnection, String))?
     private let defaults: UserDefaults
     private var connection: NSXPCConnection?
     private var attemptedRestore = false
     private var pulsing = false
     private var generation = 0
-    private var pendingMode: CoolingMode?
-    private var retryAfterMaintenance: CoolingMode?
     init(defaults: UserDefaults = .standard, helperRevision: String? = nil,
          registrationService: (any FanHelperRegistering)? = nil,
          helperSettle: @escaping @MainActor () async throws -> Void = { try await Task.sleep(for: .seconds(2)) },
          connectionFactory: (@MainActor () throws -> (NSXPCConnection, String))? = nil) {
         self.defaults = defaults
         self.connectionFactory = connectionFactory
-        // The enclosing app signature seals the helper too. Ad-hoc app rebuilds change
-        // launchd's parent identity even when the helper's executable is unchanged.
         maintenance = FanHelperMaintenance(defaults: defaults,
-            revision: helperRevision ?? (try? FanPeerIdentity.requirement(for: Bundle.main.bundleURL)),
+            revision: helperRevision ?? (try? HelperRevision.current(.fan)),
             service: registrationService, settle: helperSettle)
-        maintenanceSubscription = maintenance.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
-        maintenance.onReady = { [weak self] in
-            guard let self else { return }
-            self.attemptedRestore = false; self.message = nil
-            if let mode = self.retryAfterMaintenance {
-                self.retryAfterMaintenance = nil
-                self.select(mode)
-            }
-        }
+        maintenance.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &maintenanceSubscriptions)
+        maintenance.$updating.dropFirst().sink { [weak self] updating in
+            guard !updating else { return }
+            Task { @MainActor [weak self] in self?.verifySetupIfNeeded() }
+        }.store(in: &maintenanceSubscriptions)
     }
-    func refresh() { maintenance.refresh() }
-    func prepareHelperAfterUpdate() {
-        guard appliedMode == .system else {
-            refresh()
-            if registration != .enabled { stop() }
-            return
-        }
-        maintenance.checkForUpdate()
+    func refresh() {
+        maintenance.refresh()
+        if appliedMode != .system && (registration != .enabled || needsRefresh) { stop() }
     }
     func install() {
         guard !busy, appliedMode == .system else { return }
-        message = nil; maintenance.activate()
+        let repairConnection = message != nil || helperError != nil
+        message = nil; attemptedRestore = false
+        verifyAfterSetup = true
+        maintenance.activate(force: repairConnection)
+        if !maintenance.updating { verifySetupIfNeeded() }
+    }
+    /// A read-only handshake keeps the spinner visible through connection validation.
+    /// It never chooses a new fan profile or writes SMC values.
+    private func verifySetupIfNeeded() {
+        guard verifyAfterSetup, !busy else { return }
+        verifyAfterSetup = false
+        maintenance.refresh()
+        guard registration == .enabled && !needsRefresh && helperError == nil else { return }
+        verifyingSetup = true
+        let token = generation
+        Task {
+            defer { if generation == token { verifyingSetup = false } }
+            do {
+                let proxy = try channel()
+                let data: Data? = try await withCheckedThrowingContinuation { continuation in
+                    let gate = StateReplyGate { data, error in
+                        if let error { continuation.resume(throwing: ControlError.helper(error)) }
+                        else { continuation.resume(returning: data) }
+                    }
+                    proxy.heartbeat { gate.complete($0, $1) }
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 8) { gate.complete(nil, "timeout") }
+                }
+                guard generation == token else { return }
+                guard let data, let state = try? JSONDecoder().decode(FanControlStatus.self, from: data) else { throw ControlError.unavailable }
+                if let error = state.message { throw ControlError.helper(error) }
+                if state.mode == CoolingMode.system.rawValue { disconnect() }
+            } catch {
+                guard generation == token else { return }
+                stop(); message = L10n.text("팬 제어 연결을 확인하지 못했습니다. 팬 제어를 다시 설정해주세요.")
+            }
+        }
     }
     func openSystemSettings() { SMAppService.openSystemSettingsLoginItems() }
     func select(_ mode: CoolingMode) {
-        guard !changingMode else { return }
-        if updatingHelper { retryAfterMaintenance = mode; return }
-        retryAfterMaintenance = nil
+        guard !busy else { return }
         refresh()
-        if mode != .system, needsRefresh {
-            retryAfterMaintenance = mode
-            maintenance.checkForUpdate()
-            if updatingHelper { return }
-            retryAfterMaintenance = nil
-        }
         guard mode == .system || registration == .enabled && !needsRefresh else {
-            if registration == .requiresApproval, helperPreviouslyEnabled {
-                retryAfterMaintenance = mode; message = nil
-            } else { message = L10n.text("팬 제어를 활성화하고 시스템 설정에서 허용해주세요.") }
+            attemptedRestore = true
+            message = needsRefresh
+                ? L10n.text("팬 제어 도우미가 변경되어 설정 복구가 필요합니다.")
+                : L10n.text("팬 제어를 활성화하고 시스템 설정에서 허용해주세요.")
             return
         }
         // A deliberate selection supersedes startup restoration on the next metric pulse.
         attemptedRestore = true
-        changingMode = true; message = nil; pendingMode = mode
+        changingMode = true; message = nil
         generation += 1
         let token = generation
         Task {
-            defer { if generation == token { changingMode = false; pendingMode = nil } }
+            defer { if generation == token { changingMode = false } }
             do {
                 if mode == .system, connection == nil, registration != .enabled { appliedMode = .system }
                 else {
@@ -147,7 +163,7 @@ import ServiceManagement
     }
     func prepareToResume() { attemptedRestore = false }
     func stop() {
-        generation += 1; changingMode = false; pendingMode = nil; retryAfterMaintenance = nil
+        generation += 1; changingMode = false; verifyingSetup = false; verifyAfterSetup = false; attemptedRestore = true
         // Invalidating the authenticated session triggers helper restoration; its lease is a fallback.
         disconnect(); appliedMode = .system; pulsing = false
     }
@@ -169,18 +185,11 @@ import ServiceManagement
             channel.resume(); connection = channel
         }
         let token = generation
-        guard let proxy = connection?.remoteObjectProxyWithErrorHandler({ @Sendable [weak self] error in
+        guard let proxy = connection?.remoteObjectProxyWithErrorHandler({ @Sendable [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, self.generation == token else { return }
-                let requested = self.pendingMode ?? (self.appliedMode == .system ? nil : self.appliedMode)
                 self.stop()
-                if self.maintenance.repairOnce() {
-                    self.retryAfterMaintenance = requested; self.message = nil
-                } else if self.registration == .requiresApproval {
-                    self.retryAfterMaintenance = requested; self.message = nil
-                } else {
-                    self.message = self.helperError != nil ? nil : Self.errorText(error)
-                }
+                self.message = L10n.text("팬 제어 연결을 확인하지 못했습니다. 팬 제어를 다시 설정해주세요.")
             }
         }) as? FanControlProtocol else { throw ControlError.unavailable }
         return proxy

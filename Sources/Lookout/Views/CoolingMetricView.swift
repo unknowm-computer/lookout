@@ -60,44 +60,42 @@ struct CoolingAccessView: View {
     @EnvironmentObject private var control: CoolingControlService
     @Environment(\.appearsActive) private var appearsActive
     var canControl = true
+    private var showsRecovery: Bool {
+        control.busy || control.registration != .enabled || control.needsRefresh || control.helperError != nil || control.message != nil
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if control.updatingHelper {
-                HStack(spacing: 6) {
-                    ProgressView().controlSize(.small)
-                    Text(L10n.text("팬 제어를 자동으로 갱신하는 중입니다."))
-                }.font(.system(size: 10)).foregroundStyle(.secondary)
-            } else if control.registration == .requiresApproval {
-                HStack {
-                    Text(L10n.text("macOS에서 Lookout의 백그라운드 실행을 다시 허용해주세요."))
-                        .foregroundStyle(.secondary)
-                    Spacer(minLength: 3)
-                    Button(L10n.text("시스템 설정에서 허용")) { control.openSystemSettings() }
-                }.font(.system(size: 11))
-            } else if !control.helperPreviouslyEnabled {
-                HStack {
-                    Text(L10n.text("온도 기반 제어는 최초 활성화가 필요합니다.")).font(.system(size: 10)).foregroundStyle(.secondary)
-                    Spacer(minLength: 3)
-                    Button(L10n.text("팬 제어 활성화")) { control.install() }.disabled(!canControl || control.busy)
-                }.font(.system(size: 10))
-            } else if let error = control.helperError {
-                HStack {
-                    Text(error).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
-                    Spacer(minLength: 3)
-                    Button(L10n.text("다시 시도")) { control.install() }.disabled(!canControl || control.busy)
-                }.font(.system(size: 10))
+            if showsRecovery {
+                HelperRecoveryRow(message: recoveryMessage, working: control.busy,
+                    needsApproval: control.registration == .requiresApproval,
+                    disabled: setupDisabled, recover: { control.install() }, openSettings: { control.openSystemSettings() })
             }
-            if let message = control.message {
-                Text(message).font(.system(size: 10)).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+            if !control.updatingHelper && control.registration != .requiresApproval {
+                if let error = control.helperError {
+                    Text(error).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                }
+                if let message = control.message {
+                    Text(message).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                }
             }
             if !canControl {
                 Text(L10n.text("센서 또는 팬 정보를 확인할 수 없어 제어를 사용할 수 없습니다."))
-                    .font(.system(size: 10)).foregroundStyle(.secondary)
+                    .foregroundStyle(.secondary)
             }
         }
-        .onAppear { control.prepareHelperAfterUpdate() }
-        .onChange(of: appearsActive) { _, active in if active { control.prepareHelperAfterUpdate() } }
+        .font(.system(size: 11))
+        .padding(.bottom, showsRecovery || !canControl ? 8 : 0)
+        .onAppear { control.refresh() }
+        .onChange(of: appearsActive) { _, active in if active { control.refresh() } }
     }
+    private var setupDisabled: Bool { !canControl || control.busy || control.appliedMode != .system }
+    private var recoveryMessage: String {
+        if control.busy { return L10n.text("설정을 복구하고 연결을 확인하는 중입니다.") }
+        if control.registration == .requiresApproval { return L10n.text("macOS에서 Lookout의 백그라운드 실행을 허용해주세요.") }
+        if control.needsRefresh { return L10n.text("팬 제어 도우미가 변경되어 설정 복구가 필요합니다.") }
+        return L10n.text("팬 제어 도우미의 등록·연결을 확인해주세요.")
+    }
+
 }
 
 extension CoolingTemperatureBand {

@@ -9,3 +9,5 @@ export SWIFTPM_MODULECACHE_OVERRIDE="$PWD/.build/module-cache"
 xcrun swift test --disable-sandbox --cache-path .build/cache --config-path .build/config --security-path .build/security
 
 bash scripts/test-smc.sh
+
+python3 scripts/test-helper-artifacts.py

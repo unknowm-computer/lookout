@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>local.lookout.window-helper</string>
+<key>BundleProgram</key><string>Contents/Library/LoginItems/LookoutWindowHelper.app/Contents/MacOS/LookoutWindowHelper</string>
+<key>MachServices</key><dict><key>local.lookout.window-helper</key><true/></dict>
+<key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+<key>ProcessType</key><string>Interactive</string>
+<key>LimitLoadToSessionType</key><string>Aqua</string>
+<key>ThrottleInterval</key><integer>5</integer>
+</dict></plist>

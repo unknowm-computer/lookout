@@ -386,3 +386,92 @@
 "시스템 온도 높음" = "High system temperature";
 "온도 {0} · 기준 {1} {2} {3}" = "Temperature {0} · Threshold {3} {1} {2}";
 "CPU·GPU 중 높은 온도를 기준으로 알립니다. 팬 설정과 관계없이 동작합니다." = "Uses the higher CPU or GPU temperature, regardless of the fan setting.";
+
+"창 배치 자동 복원" = "Automatic window layout restore";
+
+"잠자기 전 저장·복귀 후 자동 복원" = "Save before sleep and restore after wake";
+
+"일반 창의 위치·크기를 자동 저장합니다. 같은 모니터가 모두 연결되면 복원하며, 전체화면·최소화 창은 제외합니다." = "Automatically saves normal window positions and sizes. Restores after all saved displays reconnect. Full-screen and minimized windows are excluded.";
+
+"자동 저장·복원이 꺼져 있습니다." = "Automatic save and restore is off.";
+
+"창을 저장·복원하려면 손쉬운 사용 권한이 필요합니다." = "Accessibility permission is required to save and restore windows.";
+
+"첫 정상 배치를 저장할 준비 중입니다." = "Preparing to save the first stable layout.";
+
+"정상 배치를 보관 중입니다. 잠자기 전에 다시 저장합니다." = "A stable layout is saved. It will be saved again before sleep.";
+
+"저장된 모니터 구성이 안정될 때까지 기다립니다. 기존 배치는 보관합니다." = "Waiting for the saved display setup to stabilize. The existing layout is preserved.";
+
+"창 배치를 복원하는 중…" = "Restoring window layout…";
+
+"{0}개 창 복원 · {1}개 건너뜀" = "Restored {0} windows · skipped {1}";
+
+"일부 창을 복원하지 못했습니다. 기존 배치를 보관합니다." = "Some windows could not be restored. The existing layout is preserved.";
+
+"정상 배치를 저장하지 못했습니다. 기존 배치는 유지합니다." = "Could not save a stable layout. The existing layout is preserved.";
+
+"손쉬운 사용 설정 열기" = "Open Accessibility Settings";
+
+"저장 배치" = "Saved layout";
+
+"지금 복원" = "Restore now";
+
+"이전 정상 배치도 별도 백업으로 보관합니다." = "The previous stable layout is kept as a separate backup.";
+
+"이전 배치 복원" = "Restore previous layout";
+
+"현재 배치로 다시 시작" = "Use current layout";
+
+"현재 배치로 다시 시작할까요?" = "Use the current layout?";
+
+"모니터 구성을 변경했거나 창을 새로 정리한 경우 현재 배치를 저장할 수 있습니다. 기존 저장본은 이전 배치로 보관합니다." = "If you changed your display setup or rearranged windows, you can save the current layout. The existing snapshot will be kept as the previous layout.";
+
+"저장" = "Save";
+
+"팬 제어를 설정하는 중입니다." = "Setting up fan control.";
+
+"macOS에서 Lookout의 백그라운드 실행을 허용해주세요." = "Allow Lookout to run in the background in macOS.";
+
+"앱이 변경되어 팬 제어 갱신이 필요합니다." = "The app has changed. Update fan control to continue.";
+
+"팬 제어를 사용하려면 활성화해주세요." = "Enable fan control to use it.";
+
+"팬 제어 상태를 확인해주세요." = "Check the fan control setup.";
+
+"팬 제어 다시 설정" = "Set up fan control again";
+
+"팬 제어 연결을 확인하지 못했습니다. 팬 제어를 다시 설정해주세요." = "Could not connect to fan control. Set up fan control again.";
+
+"손쉬운 사용 허용됨 · 실제 창 조회 확인" = "Accessibility allowed · Window access verified";
+"손쉬운 사용 허용 필요 · 실제 창 접근 거부" = "Accessibility permission needed · Window access denied";
+"권한 허용 확인 · 창 조회 응답 확인 불가" = "Permission granted · Window query unavailable";
+"권한 확인 불가 · 다시 확인해주세요." = "Permission could not be verified. Check again.";
+"손쉬운 사용 허용됨" = "Accessibility allowed";
+"손쉬운 사용 권한 확인이 필요합니다." = "Accessibility permission must be checked.";
+"창 배치 앱 서명을 확인할 수 없습니다." = "The window-layout app signature could not be verified.";
+"창 배치 도우미를 준비하지 못했습니다. 다시 시도해주세요." = "The window helper could not be prepared. Try again.";
+"창 배치 설정 실패: {0}" = "Window helper setup failed: {0}";
+"창 배치 도우미 연결을 확인해주세요." = "Check the window helper connection.";
+"창 배치 도우미 연결을 확인하지 못했습니다. 다시 설정해주세요." = "The window helper connection could not be verified. Set it up again.";
+"창 배치 도우미 연결이 끊겼습니다. 다시 설정해주세요." = "The window helper disconnected. Set it up again.";
+"창 배치 도우미를 설정하는 중입니다." = "Setting up the window helper…";
+"창 배치 도우미의 백그라운드 실행을 허용해주세요." = "Allow the window helper to run in the background.";
+"창 배치 도우미 등록·연결 설정이 필요합니다." = "Set up the window helper registration and connection.";
+"창 배치 다시 설정" = "Reset Window Helper";
+"창 배치 도우미에 연결하는 중입니다." = "Connecting to the window helper…";
+"창 배치 도우미 연결됨" = "Window helper connected";
+"다시 확인" = "Check Again";
+"‘Lookout 창 배치 도우미’를 허용해주세요. 설정의 스위치보다 실제 창 접근 결과를 기준으로 확인합니다." = "Allow “Lookout Window Helper”. Actual window access is checked separately from the switch in System Settings.";
+"권한 확인 결과" = "Permission Diagnostics";
+
+"둘 다" = "Both";
+"메뉴바 온도 표시" = "Menu Bar Temperature";
+"메뉴바에만 적용됩니다." = "Applies only to the menu bar.";
+
+"설정 복구" = "Repair Setup";
+"설정을 복구하고 연결을 확인하는 중입니다." = "Repairing setup and checking the connection.";
+"팬 제어 도우미가 변경되어 설정 복구가 필요합니다." = "The fan helper changed. Repair its setup to continue.";
+"팬 제어 도우미의 등록·연결을 확인해주세요." = "Check the fan helper registration and connection.";
+
+"등록·연결을 확인합니다. macOS 승인이 필요하면 해당 설정으로 안내합니다." = "Checks registration and connection. Opens the relevant settings if macOS approval is needed.";

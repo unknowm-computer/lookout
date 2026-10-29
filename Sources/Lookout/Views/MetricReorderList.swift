@@ -3,18 +3,29 @@ import LookoutCore
 import SwiftUI
 
 /// Preview is local to this list; saved settings and menu-bar items change only after release.
-struct MetricReorderList<Content: View>: View {
+struct MetricReorderList<Content: View, Footer: View>: View {
     let scope: MetricOrderScope
     let order: [Metric]
     var spacing: CGFloat = 0
     var separators = false
     var alignment: VerticalAlignment = .center
     var footnote: (Metric) -> String? = { _ in nil }
+    @ViewBuilder let footer: (Metric) -> Footer
     let move: (Metric, Metric) -> Void
     @ViewBuilder let content: (Metric, Int) -> Content
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var measuredFrames: [Metric: CGRect] = [:]
     @State private var session: MetricReorderSession?
+
+    init(scope: MetricOrderScope, order: [Metric], spacing: CGFloat = 0, separators: Bool = false,
+         alignment: VerticalAlignment = .center, footnote: @escaping (Metric) -> String? = { _ in nil },
+         @ViewBuilder footer: @escaping (Metric) -> Footer = { _ in EmptyView() },
+         move: @escaping (Metric, Metric) -> Void,
+         @ViewBuilder content: @escaping (Metric, Int) -> Content) {
+        self.scope = scope; self.order = order; self.spacing = spacing; self.separators = separators
+        self.alignment = alignment; self.footnote = footnote; self.footer = footer
+        self.move = move; self.content = content
+    }
 
     private var animation: Animation? { reduceMotion ? nil : .snappy(duration: 0.18) }
     private var finishingID: UUID? { session?.finishing == true ? session?.id : nil }
@@ -96,6 +107,7 @@ struct MetricReorderList<Content: View>: View {
                 Text(text).font(.system(size: 10)).foregroundStyle(.secondary)
                     .padding(.horizontal, 11).padding(.bottom, 8)
             }
+            footer(metric)
         }
     }
 

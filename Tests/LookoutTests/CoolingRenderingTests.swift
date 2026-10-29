@@ -128,3 +128,74 @@ import Testing
         }
     }
 }
+
+@Test @MainActor func temperatureSelectionPersistsWithoutChangingCollectorsDetailsOrAlerts() throws {
+    let name = "LookoutTests.temperatureMenu.\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: name))
+    defer { defaults.removePersistentDomain(forName: name) }
+    let settings = SettingsStore(defaults: defaults)
+    let configuration = settings.configuration, charts = settings.charts, alerts = settings.alerts
+    #expect(settings.menuBarValues.temperature == .both)
+    for selection in TemperatureMenuBarValue.allCases {
+        settings.setTemperatureMenuBarValue(selection)
+        let restored = SettingsStore(defaults: defaults)
+        #expect(restored.menuBarValues.temperature == selection)
+        #expect(settings.configuration == configuration && settings.charts == charts && settings.alerts == alerts)
+    }
+}
+
+@Test @MainActor func temperatureSelectionAppliesToSingleAndEitherPairedRowWithStableWidths() throws {
+    var samples: [MenuBarRenderer.Presentation] = []
+    for selection in TemperatureMenuBarValue.allCases {
+        let preferences = MenuBarValuePreferences(temperature: selection)
+        for pair in [nil, MenuBarPair(.cooling, .power), MenuBarPair(.power, .cooling)] {
+            let grouping = MenuBarGrouping(pairs: pair.map { [$0] } ?? [])
+            let metrics = pair?.metrics ?? [.cooling]
+            for compact in [false, true] {
+                var sizes: [NSSize] = []
+                for (cpu, gpu) in [(95.0, 70.0), (9.0, 120.0), (nil, 80.0)] as [(Double?, Double?)] {
+                    let reading = CoolingReading(cpu: cpu, gpu: gpu, fans: [], band: .hot, uptime: 1, canControl: false)
+                    let actual = MenuBarRenderer.presentation(metrics: metrics,
+                        readings: [.cooling: MetricReading(metric: .cooling, date: Date(), value: .cooling(reading))],
+                        compact: compact, grouping: grouping, values: preferences, alerting: [.cooling])
+                    let expected = selection.metrics.map { sensor -> String in
+                        guard let value = sensor == .cpu ? cpu : gpu else { return "—" }
+                        let text = ValueFormat.temperature(value)
+                        return pair == nil ? text : text.replacingOccurrences(of: "°C", with: "°")
+                    }
+                    #expect(actual.highlightedValues.map(\.text) == expected)
+                    #expect(actual.highlightedValues.allSatisfy { $0.color == .systemRed })
+                    #expect(actual.coloredSymbols.count == (pair == nil ? 1 : selection.metrics.count))
+                    for item in actual.highlightedValues {
+                        #expect(item.frame.minX >= 0 && item.frame.maxX <= actual.image.size.width)
+                        #expect(item.frame.minY >= 0 && item.frame.maxY <= actual.image.size.height)
+                    }
+                    if let pair {
+                        #expect(actual.highlightedValues.allSatisfy { $0.frame.minY == (pair.upper == .cooling ? 11 : 0) })
+                    }
+                    sizes.append(actual.image.size)
+                    if cpu == 95 && !compact { samples.append(actual) }
+                }
+                let missing = MenuBarRenderer.presentation(metrics: metrics, readings: [:], compact: compact, grouping: grouping, values: preferences)
+                #expect(sizes.allSatisfy { $0 == missing.image.size })
+            }
+        }
+    }
+    if let directory = ProcessInfo.processInfo.environment["LOOKOUT_RENDER_OUTPUT"] {
+        let image = NSImage(size: NSSize(width: 420, height: 110))
+        image.lockFocus()
+        NSColor.white.setFill(); NSRect(x: 0, y: 0, width: 420, height: 110).fill()
+        for (index, sample) in samples.enumerated() {
+            NSGraphicsContext.current!.cgContext.saveGState()
+            NSGraphicsContext.current!.cgContext.translateBy(x: CGFloat(index / 3) * 140 + 8, y: CGFloat(2 - index % 3) * 34 + 8)
+            sample.image.draw(at: .zero, from: .zero, operation: .sourceOver, fraction: 1)
+            MenuBarAccentOverlay.paint(presentation: sample, pressure: nil, storageMode: .available)
+            NSGraphicsContext.current!.cgContext.restoreGState()
+        }
+        image.unlockFocus()
+        if let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff),
+           let png = bitmap.representation(using: .png, properties: [:]) {
+            try png.write(to: URL(fileURLWithPath: directory).appendingPathComponent("menu-temperature-selection.png"))
+        }
+    }
+}

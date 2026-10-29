@@ -3,3 +3,6 @@ build/
 .swiftpm/
 .DS_Store
 __pycache__/
+
+# Keep locally across releases; contains reusable signed helper artifacts.
+.helper-artifacts/

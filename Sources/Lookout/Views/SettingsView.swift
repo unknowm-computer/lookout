@@ -99,6 +99,12 @@ struct SettingsView: View {
                                       default: return nil
                                       }
                                   },
+                                  footer: { metric in
+                                      if metric == .cooling && settings.configuration.enabled.contains(.cooling) {
+                                          CoolingAccessView(canControl: coolingReading?.canControl == true)
+                                              .padding(.horizontal, 11)
+                                      }
+                                  },
                                   move: { settings.move($0, to: $1) }) { metric, _ in
                     HStack(spacing: 8) {
                         Image(systemName: metric.symbol).frame(width: 20).foregroundStyle(.secondary)
@@ -117,6 +123,9 @@ struct SettingsView: View {
                                 .fixedSize(horizontal: true, vertical: false)
                                 .disabled(!settings.configuration.enabled.contains(.memory))
                                 .help(L10n.text("체크하면 Swap 바 그래프와 사용·할당 여유를 표시합니다. 해제하면 사용량/현재 할당량 한 줄만 표시합니다."))
+                        }
+                        if metric == .cooling {
+                            TemperatureMenuPicker(settings: settings)
                         }
                         if metric == .network || metric == .disk {
                             ActivityRatePicker(metric: metric, settings: settings)
@@ -150,9 +159,6 @@ struct SettingsView: View {
                 }.background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
                 Text(L10n.text("오른쪽 손잡이를 드래그하여 배치 순서를 바꿉니다. 끄면 표시와 데이터 수집이 함께 중단됩니다."))
                     .font(.system(size: 11)).foregroundStyle(.secondary)
-            }
-            if settings.configuration.enabled.contains(.cooling) {
-                CoolingAccessView(canControl: coolingReading?.canControl == true)
             }
             VStack(alignment: .leading, spacing: 7) {
                 HStack {
@@ -188,6 +194,8 @@ struct SettingsView: View {
                 Text(L10n.text("한 인터페이스만 측정합니다. VPN 트래픽을 확인하려면 해당 인터페이스를 선택하세요."))
                     .font(.system(size: 11)).foregroundStyle(.secondary)
             }
+            Divider()
+            WindowLayoutSettingsView(service: monitor.windowLayout)
         }.font(.system(size: 12))
     }
     private var coolingReading: CoolingReading? {
