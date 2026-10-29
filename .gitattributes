@@ -1,0 +1,2 @@
+# Signed helper artifacts must retain their exact bytes on every checkout.
+/.helper-artifacts/** -text

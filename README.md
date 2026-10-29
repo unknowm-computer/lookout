@@ -197,7 +197,7 @@ open build/Lookout.app
 
 결과는 `build/Lookout.app`입니다. 앱·두 helper·Sparkle 실행 파일의 Universal 아키텍처와 중첩 서명을 검사합니다. helper는 최초 설정 복구 전에는 자동 등록하지 않으며, 공증된 배포 앱은 아닙니다.
 
-helper 동작 코드는 `FanSupport`·`WindowLayoutModel`·`WindowLayoutRuntime`으로 분리되어 앱의 UI·번역 변경에 영향을 받지 않습니다. `scripts/package-helpers.py`는 helper 및 모든 로컬 의존 소스·실행 plist·전용 리소스·빌드 설정·도구 버전을 비교하고, 같으면 `.helper-artifacts/`의 **기존 서명된 결과물을 그대로 재사용**합니다. 복사 전후 서명과 캐시 무결성을 검사합니다. 이 폴더는 Git에 올리지 않지만 릴리즈 사이에는 보존하세요. 다른 빌드 호스트에서는 신뢰할 수 있는 동일 캐시를 전달하거나 `LOOKOUT_HELPER_CACHE`로 지정합니다. 캐시가 없는 새 환경에서는 다시 빌드하므로 동일 서명 보존을 보장하지 않습니다.
+helper 동작 코드는 `FanSupport`·`WindowLayoutModel`·`WindowLayoutRuntime`으로 분리되어 앱의 UI·번역 변경에 영향을 받지 않습니다. `scripts/package-helpers.py`는 helper 및 모든 로컬 의존 소스·실행 plist·전용 리소스·빌드 설정·도구 버전을 비교하고, 같으면 `.helper-artifacts/`의 **기존 서명된 결과물을 그대로 재사용**합니다. 복사 전후 서명과 캐시 무결성을 검사합니다. 이 폴더는 Git에 함께 보관해 다른 Mac에서도 동일한 서명 결과물을 가져옵니다. `.gitattributes`로 줄바꿈 변환을 막고 Git의 실행 권한 기록도 함께 보존합니다. helper 소스·빌드 설정·Xcode/Swift/SDK 버전 등 입력이 같을 때만 재사용하며, 입력이 다르거나 캐시가 없는 환경에서는 새 helper를 만들기 때문에 동일 서명·권한 유지까지 보장하지는 않습니다. 별도 캐시는 `LOOKOUT_HELPER_CACHE`로 지정할 수 있습니다.
 
 이번 모듈 분리로 helper 자체가 바뀌는 최초 업데이트에는 재설정·재승인이 필요할 수 있습니다. 이후 UI만 바뀌는 빌드에서는 helper 신원을 유지합니다. macOS가 본체의 백그라운드 승인을 다시 요구하는 경우까지 차단하지는 않으며, 실제 OS 상태와 AX 접근 결과를 계속 확인합니다.
 
