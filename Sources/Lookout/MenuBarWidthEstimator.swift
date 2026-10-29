@@ -17,7 +17,7 @@ import LookoutCore
 
     func widths(settings: SettingsStore, measurement: MenuBarGeometry.Measurement) -> [Double] {
         let ranked = settings.configuration.menuBarGrouping.rankedUnits(
-            configuration: settings.configuration, priority: settings.menuBarPriority)
+            configuration: settings.menuBarConfiguration, priority: settings.menuBarPriority)
         let alerts = Set(Metric.allCases.filter { settings.alerts.hasEnabledRules(monitored: [$0]) })
         let nextKey = Key(configuration: settings.configuration, priority: settings.menuBarPriority,
                           mode: settings.menuBarDisplayMode, alertMetrics: alerts,
@@ -27,7 +27,7 @@ import LookoutCore
         guard !ranked.isEmpty else { cached = []; return cached }
         var previousWidth = 0.0
         cached = (1...ranked.count).map { count in
-            let metrics = MenuBarDensity.automatic.metrics(configuration: settings.configuration,
+            let metrics = MenuBarDensity.automatic.metrics(configuration: settings.menuBarConfiguration,
                 priority: settings.menuBarPriority, automaticLimit: count)
             let total: Double
             if settings.menuBarDisplayMode == .individual {

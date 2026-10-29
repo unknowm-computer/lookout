@@ -12,6 +12,7 @@ import LookoutCore
     @Published private(set) var menuBarDensity: MenuBarDensity
     @Published private(set) var menuBarPriority: [Metric]
     @Published private(set) var menuBarValues: MenuBarValuePreferences
+    var menuBarConfiguration: MonitorConfiguration { menuBarValues.menuBarConfiguration(from: configuration) }
     private let defaults: UserDefaults
     let capabilities: MonitoringCapabilities
     static let key = "monitorSettings.v1"

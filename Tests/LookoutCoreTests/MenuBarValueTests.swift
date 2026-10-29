@@ -93,3 +93,27 @@ import Testing
         #expect(try JSONDecoder().decode(MenuBarValuePreferences.self, from: JSONEncoder().encode(value)) == value)
     }
 }
+
+@Test func hiddenTemperatureDoesNotConsumeMenuBarPriorityOrChangeMonitoringConfiguration() {
+    let values = MenuBarValuePreferences(temperature: .hidden)
+    #expect(values.temperature.metrics.isEmpty)
+    for pairs in [[], [MenuBarPair(.cooling, .power)], [MenuBarPair(.power, .cooling)]] {
+        let original = MonitorConfiguration(enabled: [.cpu, .cooling, .power], order: [.cooling, .power, .cpu],
+            menuBarGrouping: MenuBarGrouping(pairs: pairs))
+        let display = values.menuBarConfiguration(from: original)
+        #expect(original.enabled == [.cpu, .cooling, .power])
+        #expect(original.detailMetrics() == [.cooling, .power, .cpu])
+        #expect(display.visible == [.power, .cpu])
+        #expect(display.menuBarGrouping == original.menuBarGrouping)
+        #expect(display.menuBarGrouping.units(metrics: display.visible) == [.metric(.power), .metric(.cpu)])
+        for density in MenuBarDensity.allCases {
+            let metrics = density.metrics(configuration: display, priority: [.cooling, .cpu, .power], automaticLimit: 1)
+            #expect(metrics == (density == .minimal || density == .automatic ? [.cpu] : [.power, .cpu]))
+        }
+        #expect(MenuBarValuePreferences().menuBarConfiguration(from: original) == original)
+    }
+    let original = MonitorConfiguration(enabled: [.cooling])
+    let display = values.menuBarConfiguration(from: original)
+    #expect(display.visible.isEmpty && original.enabled == [.cooling])
+    #expect(display.menuBarGrouping.rankedUnits(configuration: display, priority: [.cooling]).isEmpty)
+}

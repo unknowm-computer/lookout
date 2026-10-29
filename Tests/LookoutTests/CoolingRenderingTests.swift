@@ -133,7 +133,10 @@ import Testing
     let name = "LookoutTests.temperatureMenu.\(UUID().uuidString)"
     let defaults = try #require(UserDefaults(suiteName: name))
     defer { defaults.removePersistentDomain(forName: name) }
-    let settings = SettingsStore(defaults: defaults)
+    let settings = SettingsStore(defaults: defaults,
+        capabilities: MonitoringCapabilities(supportsGPU: true, supportsProcessEnergy: true, supportsCooling: true))
+    settings.setEnabled(.cooling, true)
+    defaults.set(CoolingMode.comfortable.rawValue, forKey: "coolingMode.v1")
     let configuration = settings.configuration, charts = settings.charts, alerts = settings.alerts
     #expect(settings.menuBarValues.temperature == .both)
     for selection in TemperatureMenuBarValue.allCases {
@@ -141,12 +144,15 @@ import Testing
         let restored = SettingsStore(defaults: defaults)
         #expect(restored.menuBarValues.temperature == selection)
         #expect(settings.configuration == configuration && settings.charts == charts && settings.alerts == alerts)
+        #expect(settings.configuration.enabled.contains(.cooling))
+        #expect(settings.menuBarConfiguration.enabled.contains(.cooling) == (selection != .hidden))
+        #expect(defaults.string(forKey: "coolingMode.v1") == CoolingMode.comfortable.rawValue)
     }
 }
 
 @Test @MainActor func temperatureSelectionAppliesToSingleAndEitherPairedRowWithStableWidths() throws {
     var samples: [MenuBarRenderer.Presentation] = []
-    for selection in TemperatureMenuBarValue.allCases {
+    for selection in TemperatureMenuBarValue.allCases where selection != .hidden {
         let preferences = MenuBarValuePreferences(temperature: selection)
         for pair in [nil, MenuBarPair(.cooling, .power), MenuBarPair(.power, .cooling)] {
             let grouping = MenuBarGrouping(pairs: pair.map { [$0] } ?? [])
@@ -198,4 +204,48 @@ import Testing
             try png.write(to: URL(fileURLWithPath: directory).appendingPathComponent("menu-temperature-selection.png"))
         }
     }
+}
+
+@Test @MainActor func hiddenTemperatureRemovesItsCellsAndRestoresSinglePartnerWidth() {
+    let values = MenuBarValuePreferences(temperature: .hidden)
+    let reading = CoolingReading(cpu: 95, gpu: 70, fans: [], band: .hot, uptime: 1, canControl: false)
+    let readings: [Metric: MetricReading] = [.cooling: MetricReading(metric: .cooling, date: Date(), value: .cooling(reading))]
+    for compact in [false, true] {
+        for pair in [MenuBarPair(.cooling, .power), MenuBarPair(.power, .cooling)] {
+            let grouping = MenuBarGrouping(pairs: [pair])
+            let hidden = MenuBarRenderer.presentation(metrics: pair.metrics, readings: readings, compact: compact,
+                grouping: grouping, values: values, alerting: [.cooling])
+            let partner = MenuBarRenderer.presentation(metrics: [.power], readings: readings, compact: compact,
+                grouping: grouping, values: values)
+            #expect(hidden.image.size == partner.image.size)
+            #expect(hidden.highlightedValues.isEmpty && hidden.coloredSymbols.isEmpty)
+        }
+        let empty = MenuBarRenderer.presentation(metrics: [.cooling], readings: readings,
+            compact: compact, values: values, alerting: [.cooling])
+        #expect(empty.image.size.width == 0 && empty.highlightedValues.isEmpty && empty.coloredSymbols.isEmpty)
+    }
+}
+
+@Test @MainActor func hiddenTemperatureWidthBudgetDropsTheUnitAndKeepsOtherItems() throws {
+    let name = "LookoutTests.hiddenTemperatureWidth.\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: name))
+    defer { defaults.removePersistentDomain(forName: name) }
+    let settings = SettingsStore(defaults: defaults,
+        capabilities: MonitoringCapabilities(supportsGPU: true, supportsProcessEnergy: true, supportsCooling: true))
+    for metric in Metric.allCases { settings.setEnabled(metric, metric == .cooling || metric == .cpu) }
+    let estimator = MenuBarWidthEstimator()
+    let measurement = MenuBarGeometry.Measurement(available: 1000, padding: 8, gap: 6, frames: [], screenName: "test")
+    for mode in MenuBarDisplayMode.allCases {
+        settings.setMenuBarDisplayMode(mode)
+        settings.setTemperatureMenuBarValue(.both)
+        #expect(estimator.widths(settings: settings, measurement: measurement).count == 2)
+        settings.setTemperatureMenuBarValue(.hidden)
+        let widths = estimator.widths(settings: settings, measurement: measurement)
+        let expected = MenuBarRenderer.image(metrics: [.cpu], readings: [:], compact: mode == .individual,
+            grouping: settings.configuration.menuBarGrouping, values: settings.menuBarValues).size.width + measurement.padding
+        #expect(widths == [expected])
+    }
+    settings.setEnabled(.cpu, false)
+    #expect(estimator.widths(settings: settings, measurement: measurement).isEmpty)
+    #expect(settings.configuration.enabled == [.cooling])
 }

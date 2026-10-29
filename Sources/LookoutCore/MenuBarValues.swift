@@ -29,13 +29,13 @@ public enum CapacityMenuBarValue: String, CaseIterable, Codable, Sendable, Ident
 }
 
 public enum TemperatureMenuBarValue: String, CaseIterable, Codable, Sendable, Identifiable {
-    case both, cpu, gpu
+    case both, cpu, gpu, hidden
     public var id: Self { self }
     public var title: String {
-        switch self { case .both: L10n.text("둘 다"); case .cpu: "CPU"; case .gpu: "GPU" }
+        switch self { case .both: L10n.text("둘 다"); case .cpu: "CPU"; case .gpu: "GPU"; case .hidden: L10n.text("숨김") }
     }
     public var metrics: [Metric] {
-        switch self { case .both: [.cpu, .gpu]; case .cpu: [.cpu]; case .gpu: [.gpu] }
+        switch self { case .both: [.cpu, .gpu]; case .cpu: [.cpu]; case .gpu: [.gpu]; case .hidden: [] }
     }
 }
 
@@ -56,6 +56,13 @@ public struct MenuBarValuePreferences: Codable, Equatable, Sendable {
     }
     public func mode(for metric: Metric) -> CapacityMenuBarValue {
         metric == .ssd ? storage : memory
+    }
+    /// A presentation-only copy for menu-bar grouping, priority and width calculations.
+    /// Collection, fan control, alerts and detail views keep the original configuration.
+    public func menuBarConfiguration(from configuration: MonitorConfiguration) -> MonitorConfiguration {
+        var result = configuration
+        if temperature == .hidden { result.enabled.remove(.cooling) }
+        return result
     }
     public func text(for metric: Metric, value: ReadingValue?) -> String {
         switch value {

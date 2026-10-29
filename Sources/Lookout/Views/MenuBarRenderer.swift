@@ -73,6 +73,7 @@ import LookoutCore
                       compact: Bool = false, grouping: MenuBarGrouping = MenuBarGrouping(),
                       values: MenuBarValuePreferences = MenuBarValuePreferences(),
                       alerting: Set<Metric> = []) -> Presentation {
+        let metrics = metrics.filter { $0 != .cooling || values.temperature != .hidden }
         var cells: [Cell] = []
         if showAlertSlot { cells.append(Cell(text: hasAlert ? "!" : "", width: 4, alignment: .left)) }
         let units = grouping.units(metrics: metrics)
@@ -147,6 +148,11 @@ import LookoutCore
         let symbolMetric = compact && metrics.count == 1 && !labeledMetrics.contains(metrics[0]) ? metrics[0] : nil
         let symbolWidth: CGFloat = symbolMetric == nil ? 0 : 20
         let image = NSImage(size: NSSize(width: symbolWidth + cells.reduce(0) { $0 + $1.width }, height: height))
+        guard image.size.width > 0 else {
+            image.isTemplate = true
+            return Presentation(image: image, pressureFrame: nil, storageFrame: nil,
+                                highlightedValues: [], coloredSymbols: [])
+        }
         image.lockFocus()
         if let metric = symbolMetric, let symbol = NSImage(systemSymbolName: metric.symbol, accessibilityDescription: metric.title) {
             let configured = symbol.withSymbolConfiguration(.init(pointSize: 13, weight: .regular)) ?? symbol

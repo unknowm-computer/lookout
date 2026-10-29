@@ -116,7 +116,7 @@ import SwiftUI
             layoutConfiguration = nextLayout
             if settings.menuBarDensity == .automatic { layoutMessage = L10n.text("메뉴바 위치를 확인하는 중입니다.") }
         }
-        let visible = settings.menuBarDensity.metrics(configuration: settings.configuration,
+        let visible = settings.menuBarDensity.metrics(configuration: settings.menuBarConfiguration,
             priority: settings.menuBarPriority, automaticLimit: automaticLimit)
         let units = settings.configuration.menuBarGrouping.units(metrics: visible)
         let slots: [Slot] = settings.menuBarDisplayMode == .combined || visible.isEmpty
@@ -135,7 +135,10 @@ import SwiftUI
             placementOrder = settings.configuration.order
         }
         if displayedMetrics != visible { displayedMetrics = visible }
-        if visible.isEmpty { layoutMessage = L10n.text("모니터링할 항목을 선택하세요.") }
+        if visible.isEmpty {
+            layoutMessage = settings.configuration.enabled.isEmpty ? L10n.text("모니터링할 항목을 선택하세요.")
+                : L10n.text("메뉴바에 표시할 항목이 없습니다.")
+        }
         for slot in Array(statusItems.keys) where !slots.contains(slot) {
             if let item = statusItems.removeValue(forKey: slot) { removeStatusItem(item) }
         }
@@ -164,7 +167,8 @@ import SwiftUI
         let alerting = Set(monitor.activeAlerts.map(\.metric)).intersection(monitored)
         let hasAlert = !alerting.isEmpty
         if metrics.isEmpty {
-            button.image = NSImage(systemSymbolName: "chart.bar.xaxis", accessibilityDescription: L10n.text("Lookout · 모니터링 꺼짐"))
+            button.image = NSImage(systemSymbolName: "chart.bar.xaxis", accessibilityDescription:
+                settings.configuration.enabled.isEmpty ? L10n.text("Lookout · 모니터링 꺼짐") : L10n.text("Lookout · 전체 모니터링"))
             button.subviews.compactMap { $0 as? MenuBarAccentOverlay }.forEach { $0.removeFromSuperview() }
         } else {
             let presentation = MenuBarRenderer.presentation(metrics: metrics, readings: monitor.readings,
@@ -194,7 +198,7 @@ import SwiftUI
     private func evaluateLayout() {
         guard settings.menuBarDensity == .automatic, !popover.isShown else { return }
         let ranked = settings.configuration.menuBarGrouping.rankedUnits(
-            configuration: settings.configuration, priority: settings.menuBarPriority)
+            configuration: settings.menuBarConfiguration, priority: settings.menuBarPriority)
         guard !ranked.isEmpty else { return }
         let preferredScreen = NSApp.isActive && settingsWindow?.isKeyWindow == true ? settingsWindow?.screen : nil
         guard let measurement = MenuBarGeometry.measure(statusItems.values.compactMap(\.button),
