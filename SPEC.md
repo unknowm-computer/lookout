@@ -205,6 +205,7 @@ Lookout은 ‘활성 상태 보기’에서 확인하는 시스템 상태와 프
 - 모니터링 탭 하단의 별도 설정이며 기본 false다. 영역 제목은 네트워크 인터페이스와 같은 기본 12pt·primary 스타일을 상속하고, 손쉬운 사용 권한 안내와 설정 열기 버튼은 같은 행의 좌우에 11pt로 배치한다. 안내는 줄바꿈하고 버튼은 고유 폭을 유지한다. 기존 지표·메뉴바 항목·수집 타이머와 독립적으로 동작한다. 비활성 상태에서는 AX 권한 확인·창 열거·복원 대기를 하지 않는다.
 - `WindowLayoutService`가 `NSWorkspace.willSleepNotification`에서 저장하고 `didWakeNotification`에서 복원을 예약한다. 화면 꺼짐만으로 저장·복원하지 않는다. 디스플레이 변경 알림은 현재 저장본의 덮어쓰기를 즉시 막는다.
 - 활성화 후 첫 배치를 일회 저장한다. 잠자기 직전 저장은 동기 AX 조회와 제한된 예산으로 처리하며 실패 시 이전 저장본을 유지한다. 이미 화면 해제가 시작됐다면 이전 정상 배치를 사용한다. 잠자기 지연이나 화면 변경 감지의 완전성은 보장하지 않는다.
+- 저장본과 복원 대기는 같은 부팅 세션에 한정한다. 도우미 시작 시 `kern.bootsessionuuid`를 한 번 읽어 `windowLayout.bootSession.v1`과 비교한다. 다르거나 저장 식별자가 없으면 현재·백업 배치와 pending/restoreRequested를 모두 지우고 새 세션을 기록한다. 활성화·권한 확인 후 기존 일회 저장 절차로 새 배치를 만든다. 부팅 ID 조회 실패 시 이전 데이터는 버리고 저장·복원을 중단한다. 잠자기·앱/도우미 재실행은 같은 세션의 기록을 보존한다. 종료 알림이나 주기적 부팅 확인은 사용하지 않는다.
 - 모니터 UUID 집합·포인트 해상도 일치와 연속 2초 안정 후 복원한다. 전역 원점 변경은 허용하고 창의 모니터 상대 좌표로 위치를 계산한다. 현재 화면의 작업 영역을 벗어나면 위치·크기를 제한한다. UUID가 불안정하거나 해상도가 달라지면 자동 추정하지 않는다.
 - 복귀 대기는 1초 간격 최대 30회이며 창 목록의 상시 폴링은 없다. 재연결·세션/앱 활성화·설정 복귀 시 대기 중인 복원을 제한된 작업으로 재시도한다. 실패한 창만 한 번 더 쓰고, 성공한 창은 반복 이동하지 않는다. 기능 해제·종료·새 잠자기 시 이전 작업을 취소한다.
 - AX 접근과 잠자기 이벤트 처리는 `LookoutWindowHelper.app` 사용자 세션 LaunchAgent에서 수행한다. 팬 제어 root daemon과 공유하지 않는다. `SMAppService.agent` 등록·연결 복구는 팬 제어와 같은 수동 등록 상태 기계를 사용하며, 저장 키와 서비스 종류를 분리한다. 시작/설정 복귀/연결 오류 때 자동 등록하지 않는다. `설정 복구`는 정상 등록을 유지하고 helper 변경·등록 누락·연결 오류에서만 필요한 등록 복구 후 연결한다. 백그라운드 승인이 필요하면 OS 설정으로 안내한다.
@@ -215,7 +216,7 @@ Lookout은 ‘활성 상태 보기’에서 확인하는 시스템 상태와 프
 - 자동 복원의 기준은 최신 정상 배치 1개이며 이전 배치 1개는 별도 백업이다. 모니터 개수·UUID 집합·포인트 해상도가 일치하지 않으면 복원을 보류하고 저장본을 유지한다. 같은 모니터의 좌우·상하 배치 변경은 현재 모니터 원점과 저장된 상대 좌표로 처리한다. 집·사무실 등 구성별 프로필 자동 선택·관리 UI는 2026-10-29 기준 보류하며, 같은 환경의 잠자기 후 복원 정확도와 안정성 개선을 우선한다.
 - 정상 저장의 상한은 모니터 16대·창 200개·인코딩 1MiB다. AX 메시지 제한은 각 0.12초, 저장 열거 예산 2초·복원 패스 예산 3초다. 단일 앱의 응답 지연으로 실제 총시간이 예산을 조금 넘을 수 있다. 프레임 쓰기 성공 후 위치와 변경 가능한 크기를 확인한다.
 - `지금 복원`·`이전 배치 복원`은 보조 동작이다. 백업 복원이 성공하면 해당 배치를 현재 기준으로 바꾸고 기존 현재 배치를 백업에 보관한다. `현재 배치로 다시 시작`은 확인 후 현재 모니터 구성으로 새 저장본을 만들며, 실패 시 보호 상태와 저장본을 유지한다.
-- 활성 선택은 앱의 `windowLayout.enabled.v1`, 배치·보호 상태는 도우미 도메인의 `windowLayout.current.v1`, `windowLayout.lastGood.v1`, `windowLayout.pending.v1`, `windowLayout.restoreRequested.v1`에 저장한다. 기존 앱의 배치는 유효성 검증 후 한 번 이전하며 기존 도우미 기록과 앱의 원본을 덮어쓰거나 삭제하지 않는다. 창 도우미 등록 이력·helper 서명과 실행 plist 지문은 앱의 `windowHelperEnabled.v1 / windowHelperRevision.v1`에 별도 저장한다. 잠자기 전 화면 변경에 따른 저장 보호와 실제 복원 요청을 구분해, 평소 화면 구성 변경만으로 창을 이동시키지 않는다. 제목·앱 식별·좌표는 외부 전송하지 않는다. 앱/기기별 AX 지원·다중 모니터 잠자기 실검증은 별도로 진행한다.
+- 활성 선택은 앱의 `windowLayout.enabled.v1`, 배치·보호 상태는 도우미 도메인의 `windowLayout.current.v1`, `windowLayout.lastGood.v1`, `windowLayout.pending.v1`, `windowLayout.restoreRequested.v1`에 저장한다. 기존 앱의 배치는 부팅 ID가 없으므로 가져오지 않고 UI의 저장 날짜에도 대체 표시하지 않는다. XPC의 기존 legacy 인자는 호환성을 위해 유지하지만 앱은 nil을 보내고 도우미는 이를 무시한다. 창 도우미 등록 이력·helper 서명과 실행 plist 지문은 앱의 `windowHelperEnabled.v1 / windowHelperRevision.v1`에 별도 저장한다. 잠자기 전 화면 변경에 따른 저장 보호와 실제 복원 요청을 구분해, 평소 화면 구성 변경만으로 창을 이동시키지 않는다. 제목·앱 식별·좌표는 외부 전송하지 않는다. 앱/기기별 AX 지원·다중 모니터 잠자기 실검증은 별도로 진행한다.
 
 ### 권한 설정의 공통 원칙
 
@@ -306,9 +307,9 @@ Lookout은 ‘활성 상태 보기’에서 확인하는 시스템 상태와 프
 | `Sources/LookoutFanHelper/` | 권한 있는 팬 제어·lease·복구 marker·자동 복귀 |
 | `Sources/Lookout/CoolingControlService.swift / FanHelperMaintenance.swift` | 팬 모드·연결 생명주기·수동 등록/갱신·OS 상태 안내 |
 | `Sources/Lookout/MonitoringCoordinator.swift` | 샘플링·잠자기·결과·알림 연동 |
-| `Sources/Lookout/WindowLayoutClient.swift` | 창 도우미 수동 등록·연결·상태·기존 배치 이전 |
+| `Sources/Lookout/WindowLayoutClient.swift` | 창 도우미 수동 등록·연결·상태 |
 | `Sources/WindowLayoutRuntime/ / Sources/LookoutWindowHelper/` | 사용자 세션 도우미·창 배치 저장·백업·잠자기 이벤트·AX 복원 |
-| `Sources/WindowHelperProtocol/` | 제한된 XPC 요청·상태·기존 배치 이전 모델 |
+| `Sources/WindowHelperProtocol/` | 제한된 XPC 요청·상태·기존 프로토콜 호환 모델 |
 | `Sources/WindowLayoutModel/` | 창·화면 기록 검증·상대 좌표·작업 영역 계산·언어와 독립된 상태 모델 |
 | `Sources/Lookout/ProcessDetailsStore.swift` | 펼쳐진 프로세스 목록의 요청·수집 생명주기 |
 | `Sources/Lookout/MenuBarController.swift` | 상태 항목·팝업·설정 창·자동 표시 |

@@ -65,6 +65,29 @@ import Testing
     #expect(client.connectionError != nil && !client.connected && !client.trusted)
     #expect(registration.registrations == 0 && registration.unregistrations == 0)
     #expect(defaults.data(forKey: "windowLayout.current.v1") == data)
+    #expect(client.savedAt == nil && client.backupAt == nil && !client.canRestore)
+}
+
+@Test @MainActor func windowHelperDoesNotResendUnscopedLegacyDataOnConnection() async throws {
+    let (name, defaults) = try windowDefaults(); defer { defaults.removePersistentDomain(forName: name) }
+    defaults.set(true, forKey: WindowLayoutClient.enabledKey)
+    defaults.set("same", forKey: HelperServiceKind.window.revisionKey)
+    defaults.set(Data("legacy snapshot".utf8), forKey: "windowLayout.current.v1")
+    defaults.set(true, forKey: "windowLayout.pending.v1")
+    defaults.set(true, forKey: "windowLayout.restoreRequested.v1")
+    var configured = false
+    let client = WindowLayoutClient(defaults: defaults, revision: "same",
+        registrationService: FakeFanHelperRegistration(status: .enabled),
+        requestOverride: { action, _, legacy in
+            #expect(legacy == nil)
+            if action == nil { configured = true }
+            return try JSONEncoder().encode(WindowHelperState(enabled: true, busy: false, phase: .ready,
+                permission: WindowAccessReport(trustedAPI: true, query: .allowed), savedAt: nil,
+                backupAt: nil, pending: false, processID: 123))
+        })
+    defer { client.stop() }
+    for _ in 0..<100 where client.busy { try await Task.sleep(for: .milliseconds(2)) }
+    #expect(configured && client.connected && client.savedAt == nil && !client.canRestore)
 }
 @Test func actualAXQueryDistinguishesPermissionFromAnUnresponsiveTarget() {
     #expect(WindowAccessReport(trustedAPI: false, query: .allowed).canAccess)

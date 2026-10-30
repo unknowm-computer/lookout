@@ -43,11 +43,10 @@ import WindowHelperProtocol
     var connected: Bool { state != nil }
     var trusted: Bool { connected && state?.permission.canAccess == true }
     var busy: Bool { connecting || maintenance.updating || state?.busy == true }
-    var savedAt: Date? { if let state { return state.savedAt }; return legacySnapshot("windowLayout.current.v1")?.date ?? legacySnapshot("windowLayout.lastGood.v1")?.date }
-    var backupAt: Date? { if let state { return state.backupAt }; return legacySnapshot("windowLayout.lastGood.v1")?.date }
+    var savedAt: Date? { state?.savedAt }
+    var backupAt: Date? { state?.backupAt }
     var canRestore: Bool { enabled && trusted && savedAt != nil && !busy }
     var statusMessage: String { state?.phase.message ?? L10n.text("창 배치 도우미 연결을 확인해주세요.") }
-    private func legacySnapshot(_ key: String) -> WindowLayoutSnapshot? { WindowLayoutSnapshot.decode(defaults.data(forKey: key)) }
     func setEnabled(_ value: Bool) {
         guard enabled != value else { return }
         enabled = value; defaults.set(value, forKey: Self.enabledKey)
@@ -112,21 +111,14 @@ import WindowHelperProtocol
         }
     }
     private func request(action: String?, token: Int) async throws -> Data? {
-        if let requestOverride { return try await requestOverride(action, enabled, action == nil ? legacyTransfer() : nil) }
+        if let requestOverride { return try await requestOverride(action, enabled, nil) }
         let proxy = try channel(token: token)
         return try await withCheckedThrowingContinuation { continuation in
             let gate = WindowReplyGate(continuation)
             if let action { proxy.perform(action) { gate.complete(.success($0)) } }
-            else { proxy.configure(enabled, legacy: legacyTransfer()) { gate.complete(.success($0)) } }
+            else { proxy.configure(enabled, legacy: nil) { gate.complete(.success($0)) } }
             DispatchQueue.global().asyncAfter(deadline: .now() + 8) { gate.complete(.failure(WindowConnectionError.timeout)) }
         }
-    }
-    private func legacyTransfer() -> Data? {
-        let transfer = WindowLayoutTransfer(current: legacySnapshot("windowLayout.current.v1").flatMap { try? JSONEncoder().encode($0) },
-            backup: legacySnapshot("windowLayout.lastGood.v1").flatMap { try? JSONEncoder().encode($0) }, pending: defaults.bool(forKey: "windowLayout.pending.v1"),
-            restoreRequested: defaults.bool(forKey: "windowLayout.restoreRequested.v1"))
-        guard let data = try? JSONEncoder().encode(transfer), data.count <= WindowHelperEndpoint.maximumTransferBytes else { return nil }
-        return data
     }
     private func channel(token: Int) throws -> WindowHelperProtocol {
         if connection == nil {

@@ -29,7 +29,8 @@ import WindowHelperProtocol
     }
     fileprivate func attach(_ connection: NSXPCConnection) { client = connection }
     fileprivate func configure(_ enabled: Bool, legacy: Data?) -> Data? {
-        engine.importLegacy(WindowLayoutTransfer.decode(legacy))
+        // Keep the XPC argument for compatibility, but legacy app snapshots have no boot identity.
+        // Importing them here could resurrect a layout cleared after reboot.
         engine.setEnabled(enabled); engine.refresh()
         return encodedState()
     }

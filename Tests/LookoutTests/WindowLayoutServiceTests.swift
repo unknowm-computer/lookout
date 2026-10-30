@@ -35,7 +35,9 @@ private func layoutFixture() -> WindowLayoutSnapshot {
 }
 @MainActor private func layoutDefaults() -> (String, UserDefaults) {
     let name = "LookoutTests.layout.\(UUID().uuidString)"
-    return (name, UserDefaults(suiteName: name)!)
+    let defaults = UserDefaults(suiteName: name)!
+    defaults.set(WindowBootSession.currentID(), forKey: WindowLayoutService.bootSessionKey)
+    return (name, defaults)
 }
 
 @Test @MainActor func windowLayoutDefaultsOffAndDoesNoAXOrPollingWork() async throws {
@@ -248,26 +250,76 @@ private func layoutFixture() -> WindowLayoutSnapshot {
     #expect(!service.pending && backend.captures == 1)
 }
 
-@Test @MainActor func helperMigratesLegacySnapshotsOnceAndKeepsAnIndependentBackup() throws {
+@Test @MainActor func windowLayoutNewBootClearsBothSnapshotsAndPendingBeforeCapturingFreshLayout() async throws {
     let (name, defaults) = layoutDefaults(); defer { defaults.removePersistentDomain(forName: name) }
-    let saved = layoutFixture(), backend = LayoutBackendFixture(layoutFixture())
-    let service = WindowLayoutService(defaults: defaults, backend: backend, observe: false, startEnabled: false)
+    let saved = layoutFixture(); var fresh = saved; fresh.windows[0].frame.x = 200
+    let backend = LayoutBackendFixture(fresh)
+    defaults.set("previous-boot", forKey: WindowLayoutService.bootSessionKey)
+    defaults.set(true, forKey: WindowLayoutService.enabledKey)
+    defaults.set(try JSONEncoder().encode(saved), forKey: WindowLayoutService.currentKey)
+    defaults.set(try JSONEncoder().encode(saved), forKey: WindowLayoutService.backupKey)
+    defaults.set(true, forKey: WindowLayoutService.pendingKey)
+    defaults.set(true, forKey: WindowLayoutService.restoreKey)
+    var uptime: TimeInterval = 0
+    let service = WindowLayoutService(defaults: defaults, backend: backend, observe: false,
+                                      step: .milliseconds(2), bootSessionID: "current-boot", now: { uptime })
     defer { service.stop() }
-    let data = try JSONEncoder().encode(saved)
-    service.importLegacy(WindowLayoutTransfer(current: Data("bad".utf8), backup: data, pending: true, restoreRequested: true))
-    #expect(service.current == nil && service.lastGood == saved && service.pending)
-    #expect(!service.enabled && backend.permissionChecks == 0)
-    service.importLegacy(WindowLayoutTransfer(current: data, backup: nil, pending: false, restoreRequested: false))
-    #expect(service.current == nil && service.lastGood == saved && service.pending)
+    #expect(service.current == nil && service.lastGood == nil && !service.pending)
+    #expect(defaults.data(forKey: WindowLayoutService.currentKey) == nil)
+    #expect(defaults.data(forKey: WindowLayoutService.backupKey) == nil)
+    #expect(!defaults.bool(forKey: WindowLayoutService.pendingKey) && !defaults.bool(forKey: WindowLayoutService.restoreKey))
+    #expect(defaults.string(forKey: WindowLayoutService.bootSessionKey) == "current-boot")
+    #expect(service.enabled && backend.restores.isEmpty)
+    uptime = 3; try await finish(service)
+    #expect(service.current == fresh && service.lastGood == nil && backend.captures == 1)
+    #expect(backend.restores.isEmpty && !service.pending)
+    service.willSleep(); service.didWake(); try await finish(service)
+    #expect(backend.restores == [fresh.windows])
 }
-@Test @MainActor func helperMigrationNeverOverwritesItsNewerSavedLayout() throws {
+@Test @MainActor func windowLayoutSameBootRelaunchPreservesBackupAndResumesPendingRestore() async throws {
     let (name, defaults) = layoutDefaults(); defer { defaults.removePersistentDomain(forName: name) }
-    let saved = layoutFixture(), data = try JSONEncoder().encode(saved)
-    defaults.set(data, forKey: WindowLayoutService.currentKey)
+    let saved = layoutFixture(); var backup = saved; backup.windows[0].frame.x = 150
     let backend = LayoutBackendFixture(saved)
-    let service = WindowLayoutService(defaults: defaults, backend: backend, observe: false, startEnabled: false)
+    defaults.set("same-boot", forKey: WindowLayoutService.bootSessionKey)
+    defaults.set(true, forKey: WindowLayoutService.enabledKey)
+    defaults.set(try JSONEncoder().encode(saved), forKey: WindowLayoutService.currentKey)
+    defaults.set(try JSONEncoder().encode(backup), forKey: WindowLayoutService.backupKey)
+    defaults.set(true, forKey: WindowLayoutService.pendingKey)
+    defaults.set(true, forKey: WindowLayoutService.restoreKey)
+    let service = WindowLayoutService(defaults: defaults, backend: backend, observe: false,
+                                      step: .milliseconds(1), bootSessionID: "same-boot")
     defer { service.stop() }
-    service.importLegacy(WindowLayoutTransfer(current: nil, backup: data, pending: true, restoreRequested: true))
-    #expect(service.current == saved && service.lastGood == nil && !service.pending)
-    #expect(defaults.data(forKey: WindowLayoutService.currentKey) == data)
+    try await finish(service)
+    #expect(service.current == saved && service.lastGood == backup && !service.pending)
+    #expect(backend.restores == [saved.windows] && backend.captures == 0)
+}
+@Test @MainActor func windowLayoutUnscopedLegacyOrUnknownBootCannotRestoreEvenManually() throws {
+    for bootID in ["new-boot", nil] as [String?] {
+        let (name, defaults) = layoutDefaults(); defer { defaults.removePersistentDomain(forName: name) }
+        defaults.removeObject(forKey: WindowLayoutService.bootSessionKey)
+        let saved = layoutFixture(), backend = LayoutBackendFixture(saved)
+        defaults.set(true, forKey: WindowLayoutService.enabledKey)
+        defaults.set(try JSONEncoder().encode(saved), forKey: WindowLayoutService.currentKey)
+        defaults.set(try JSONEncoder().encode(saved), forKey: WindowLayoutService.backupKey)
+        defaults.set(true, forKey: WindowLayoutService.pendingKey)
+        defaults.set(true, forKey: WindowLayoutService.restoreKey)
+        let service = WindowLayoutService(defaults: defaults, backend: backend, observe: false,
+                                          startEnabled: false, bootSessionID: bootID)
+        defer { service.stop() }
+        #expect(!service.enabled && service.snapshot == nil && !service.pending)
+        #expect(defaults.bool(forKey: WindowLayoutService.enabledKey))
+        #expect(backend.permissionChecks == 0 && backend.captures == 0)
+        service.restoreNow(); service.restoreNow(previous: true)
+        #expect(backend.restores.isEmpty)
+        if bootID == nil {
+            service.setEnabled(true); service.useCurrentLayout(); service.willSleep(); service.didWake()
+            #expect(service.status == .captureFailed && !service.busy)
+            #expect(backend.captures == 0 && backend.restores.isEmpty)
+        }
+    }
+}
+@Test func windowBootIdentityIsAStableKernelUUID() throws {
+    let value = try #require(WindowBootSession.currentID())
+    #expect(UUID(uuidString: value) != nil)
+    #expect(WindowBootSession.currentID() == value)
 }

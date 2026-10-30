@@ -18,6 +18,7 @@ import WindowHelperProtocol
     var snapshot: WindowLayoutSnapshot? { current ?? lastGood }
     var canRestore: Bool { enabled && trusted && snapshot != nil && !busy }
     private let defaults: UserDefaults
+    private let bootSessionID: String?
     private let backend: any WindowLayoutBackend
     private let now: () -> TimeInterval
     private let step: Duration
@@ -32,12 +33,23 @@ import WindowHelperProtocol
     static let backupKey = "windowLayout.lastGood.v1"
     static let pendingKey = "windowLayout.pending.v1"
     static let restoreKey = "windowLayout.restoreRequested.v1"
+    static let bootSessionKey = "windowLayout.bootSession.v1"
 
     init(defaults: UserDefaults = .standard, backend: (any WindowLayoutBackend)? = nil,
          observe: Bool = true, startEnabled: Bool = true, step: Duration = .seconds(1), attempts: Int = 30,
+         bootSessionID: String? = WindowBootSession.currentID(),
          now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
         self.defaults = defaults; self.backend = backend ?? AccessibilityWindowLayoutBackend()
+        self.bootSessionID = bootSessionID
         self.now = now; self.step = step; self.attempts = attempts; changedAt = now()
+        // Old/unscoped snapshots must never be adopted as belonging to this boot.
+        // Checking at startup also covers shutdowns where no final notification was delivered.
+        if bootSessionID == nil || defaults.string(forKey: Self.bootSessionKey) != bootSessionID {
+            for key in [Self.currentKey, Self.backupKey, Self.pendingKey, Self.restoreKey] {
+                defaults.removeObject(forKey: key)
+            }
+            defaults.set(bootSessionID, forKey: Self.bootSessionKey)
+        }
         enabled = startEnabled && defaults.bool(forKey: Self.enabledKey)
         current = WindowLayoutSnapshot.decode(defaults.data(forKey: Self.currentKey))
         lastGood = WindowLayoutSnapshot.decode(defaults.data(forKey: Self.backupKey))
@@ -56,6 +68,7 @@ import WindowHelperProtocol
     }
     func refresh() {
         guard enabled else { return }
+        guard bootSessionID != nil else { status = .captureFailed; return }
         permission = backend.checkPermission()
         trusted = permission.canAccess
         guard trusted else { cancel(); status = .permission; return }
@@ -95,7 +108,7 @@ import WindowHelperProtocol
         }
     }
     func restoreNow(previous: Bool = false) {
-        guard enabled, !sleeping, !busy, let saved = (previous ? lastGood : snapshot) else { return }
+        guard bootSessionID != nil, enabled, !sleeping, !busy, let saved = (previous ? lastGood : snapshot) else { return }
         permission = backend.checkPermission()
         trusted = permission.canAccess
         guard trusted else { status = .permission; return }
@@ -157,7 +170,7 @@ import WindowHelperProtocol
         }
     }
     func useCurrentLayout() {
-        guard enabled, !sleeping, !busy, now() - changedAt >= 2, backend.isTrusted else { return }
+        guard bootSessionID != nil, enabled, !sleeping, !busy, now() - changedAt >= 2, backend.isTrusted else { return }
         let wasPending = pending
         setPending(false)
         save(requireMatchingDisplays: false)
@@ -165,7 +178,7 @@ import WindowHelperProtocol
         else { setRestoreRequested(false) }
     }
     private func save(requireMatchingDisplays: Bool = true) {
-        guard enabled, !pending, now() - changedAt >= 2, backend.isTrusted else { return }
+        guard bootSessionID != nil, enabled, !pending, now() - changedAt >= 2, backend.isTrusted else { return }
         let screens = backend.displays()
         guard (!requireMatchingDisplays || snapshot.map({ LayoutDisplay.matches($0.displays, screens) }) ?? !screens.isEmpty),
               let candidate = backend.capture(), candidate.isValid,
@@ -200,20 +213,6 @@ import WindowHelperProtocol
         add(workspace, NSWorkspace.sessionDidBecomeActiveNotification) { if $0.pending && $0.restoreRequested { $0.refresh() } }
         add(.default, NSApplication.didBecomeActiveNotification) { $0.refresh() }
         add(.default, NSApplication.didChangeScreenParametersNotification) { $0.displaysChanged() }
-    }
-    func importLegacy(_ transfer: WindowLayoutTransfer?) {
-        guard !defaults.bool(forKey: "windowLayout.helperMigrated.v1") else { return }
-        defer { defaults.set(true, forKey: "windowLayout.helperMigrated.v1") }
-        guard current == nil && lastGood == nil, let transfer else { return }
-        if let value = transfer.validCurrent, let data = try? JSONEncoder().encode(value) {
-            current = value; defaults.set(data, forKey: Self.currentKey)
-        }
-        if let value = transfer.validBackup, let data = try? JSONEncoder().encode(value) {
-            lastGood = value; defaults.set(data, forKey: Self.backupKey)
-        }
-        if snapshot != nil {
-            setPending(transfer.pending); setRestoreRequested(transfer.restoreRequested)
-        }
     }
     func report() -> WindowHelperState {
         WindowHelperState(enabled: enabled, busy: busy, phase: status, permission: permission,
