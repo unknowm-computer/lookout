@@ -109,6 +109,23 @@ import Testing
     #expect(WindowLayoutTransfer.decode(Data(repeating: 0, count: WindowHelperEndpoint.maximumTransferBytes + 1)) == nil)
 }
 
+@Test func windowRestoreDiagnosticsAreBoundedValidatedAndCompatibleWithOlderReplies() throws {
+    var state = WindowHelperState(enabled: true, busy: false, phase: .incomplete,
+        permission: WindowAccessReport(trustedAPI: true, query: .allowed), savedAt: nil, backupAt: nil,
+        pending: true, processID: 123)
+    let older = try JSONEncoder().encode(state)
+    #expect(WindowHelperState.decode(older)?.restoreReport == nil)
+    let issues = (0..<200).map { _ in WindowRestoreIssue(id: UUID(), app: String(repeating: "앱", count: 500),
+        title: String(repeating: "창", count: 4_096), reason: .ambiguousIdentity) }
+    state.restoreReport = WindowRestoreReport(restored: 0, skipped: 0, failed: 200, issues: issues)
+    let data = try JSONEncoder().encode(state)
+    let decoded = try #require(WindowHelperState.decode(data)?.restoreReport)
+    #expect(data.count < 65_536 && decoded.issues.count == 20 && decoded.failed == 200)
+    #expect(decoded.issues[0].app.count == 64 && decoded.issues[0].title.count == 96)
+    state.restoreReport?.restored = 1
+    #expect(WindowHelperState.decode(try JSONEncoder().encode(state)) == nil)
+}
+
 @Test @MainActor func unavailableWindowHelperReportsFailureWithoutXPCQueueCrashOrAutomaticRepair() async throws {
     let (name, defaults) = try windowDefaults(); defer { defaults.removePersistentDomain(forName: name) }
     defaults.set(true, forKey: WindowLayoutClient.enabledKey)

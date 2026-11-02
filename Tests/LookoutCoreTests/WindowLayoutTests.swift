@@ -19,6 +19,17 @@ private func window(_ id: String = "external") -> LayoutWindow {
     #expect(!LayoutDisplay.matches(saved, changed))
     #expect(!LayoutDisplay.matches([], []))
 }
+
+@Test func topologyIgnoresDockAndMenuBarChangesButDetectsDisconnectionAndRearrangement() {
+    let saved = [display(), display("internal", x: 0, y: 0)]
+    var workArea = saved
+    workArea[0].visibleFrame.height -= 60
+    workArea[1].visibleFrame.y += 10
+    #expect(LayoutDisplay.sameTopology(saved, workArea.reversed()))
+    var moved = saved; moved[0].frame.x += 10
+    #expect(!LayoutDisplay.sameTopology(saved, moved))
+    #expect(!LayoutDisplay.sameTopology(saved, [saved[0]]))
+}
 @Test func layoutUsesDisplayRelativeCoordinatesIncludingDisplaysAboveAndLeft() {
     let saved = window()
     #expect(saved.target(on: [display()]) == LayoutRect(x: -1820, y: -1030, width: 800, height: 600))

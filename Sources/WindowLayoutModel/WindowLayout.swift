@@ -39,6 +39,12 @@ public struct LayoutDisplay: Codable, Equatable, Sendable {
                 && abs($0.frame.height - display.frame.height) < 1 }
         }
     }
+    /// Dock/menu-bar work-area changes do not mean monitors were disconnected or rearranged.
+    public static func sameTopology(_ lhs: [Self], _ rhs: [Self]) -> Bool {
+        matches(lhs, rhs) && lhs.allSatisfy { display in
+            rhs.contains { $0.id == display.id && $0.frame == display.frame }
+        }
+    }
 }
 
 public struct LayoutWindow: Codable, Equatable, Sendable, Identifiable {

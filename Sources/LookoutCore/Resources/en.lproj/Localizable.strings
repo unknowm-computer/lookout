@@ -477,3 +477,16 @@
 "등록·연결을 확인합니다. macOS 승인이 필요하면 해당 설정으로 안내합니다." = "Checks registration and connection. Opens the relevant settings if macOS approval is needed.";
 "숨김" = "Hidden";
 "메뉴바에 표시할 항목이 없습니다." = "No items to display in the menu bar.";
+
+"{0}개 창 복원 · {1}개 건너뜀 · {2}개 실패" = "{0} windows restored · {1} skipped · {2} failed";
+"같은 식별자·제목의 창이 여러 개여서 구분할 수 없습니다." = "Several windows share the same identifier and title and cannot be distinguished.";
+"저장된 창을 찾지 못했습니다. 창 제목이 변경되었거나 닫혔을 수 있습니다." = "The saved window could not be found. Its title may have changed, or it may have been closed.";
+"앱의 창 조회에 응답이 없거나 오류가 발생했습니다." = "The app did not respond to the window query, or returned an error.";
+"복원 시간 제한에 도달했습니다. 다시 복원하면 재시도합니다." = "The restore time limit was reached. Restore again to retry.";
+"창 접근 권한이 거부되었습니다." = "Window access was denied.";
+"앱이 창의 위치·크기 변경을 허용하지 않았습니다." = "The app rejected a change to the window position or size.";
+"변경 요청 후 창의 위치·크기가 저장된 배치와 일치하지 않습니다." = "After the change request, the window position or size does not match the saved layout.";
+"복원 도중 모니터 작업 영역이 바뀌었습니다. 안정된 후 다시 복원해주세요." = "The display work area changed during restoration. Restore again after it stabilizes.";
+"복원이 완료되지 않아 새 배치 저장을 보류합니다. 기존 정상 배치는 유지됩니다." = "Saving a new layout is paused until restoration completes. The existing good layout is preserved.";
+"복원 실패 내역" = "Restore failures";
+"실패 내역은 최대 20개까지 표시합니다." = "Up to 20 failed windows are shown.";

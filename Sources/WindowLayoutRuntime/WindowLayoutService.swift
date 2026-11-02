@@ -13,6 +13,7 @@ import WindowHelperProtocol
     @Published private(set) var status: Status = .disabled
     @Published private(set) var current: WindowLayoutSnapshot?
     @Published private(set) var lastGood: WindowLayoutSnapshot?
+    @Published private(set) var restoreReport: WindowRestoreReport?
     private(set) var pending: Bool
     private var restoreRequested: Bool
     var snapshot: WindowLayoutSnapshot? { current ?? lastGood }
@@ -27,6 +28,7 @@ import WindowHelperProtocol
     private var task: Task<Void, Never>?
     private var generation = 0
     private var sleeping = false
+    private var observedDisplays: [LayoutDisplay]?
     private var observers: [(NotificationCenter, NSObjectProtocol)] = []
     static let enabledKey = "windowLayout.enabled.v1"
     static let currentKey = "windowLayout.current.v1"
@@ -55,6 +57,7 @@ import WindowHelperProtocol
         lastGood = WindowLayoutSnapshot.decode(defaults.data(forKey: Self.backupKey))
         pending = defaults.bool(forKey: Self.pendingKey)
         restoreRequested = defaults.bool(forKey: Self.restoreKey)
+        observedDisplays = snapshot?.displays
         if snapshot == nil { pending = false; restoreRequested = false }
         if observe { installObservers() }
         if enabled { refresh() }
@@ -100,11 +103,19 @@ import WindowHelperProtocol
     }
     func displaysChanged() {
         guard enabled else { return }
+        let displays = backend.displays()
+        if let observedDisplays, LayoutDisplay.sameTopology(observedDisplays, displays) {
+            if pending && restoreRequested && !sleeping && !busy { refresh() }
+            return
+        }
+        observedDisplays = displays
         changedAt = now()
         // A disconnect can precede willSleep. Freeze the existing snapshot immediately.
         if snapshot != nil {
             setPending(true); status = .waiting
             if restoreRequested && !sleeping && !busy { refresh() }
+        } else if !sleeping {
+            scheduleBaseline()
         }
     }
     func restoreNow(previous: Bool = false) {
@@ -112,7 +123,7 @@ import WindowHelperProtocol
         permission = backend.checkPermission()
         trusted = permission.canAccess
         guard trusted else { status = .permission; return }
-        cancel(); setPending(true); setRestoreRequested(true); busy = true; status = .waiting
+        cancel(); setPending(true); setRestoreRequested(true); busy = true; status = .waiting; restoreReport = nil
         let token = generation
         task = Task { [weak self] in
             guard let self else { return }
@@ -126,18 +137,24 @@ import WindowHelperProtocol
                 stable = displays == previousDisplays ? stable + 1 : 0; previousDisplays = displays
                 guard stable >= 2, LayoutDisplay.matches(saved.displays, displays) else { continue }
                 self.status = .restoring
-                var result = self.backend.restore(saved.windows, displays: displays)
+                var result = self.backend.restore(saved.windows, displays: displays, identityScope: saved.windows)
                 // Only retry unsuccessful writes. Never move successful windows again during a retry.
                 if !result.failed.isEmpty {
                     do { try await Task.sleep(for: self.step) } catch { return }
                     guard self.enabled, self.generation == token, !Task.isCancelled else { return }
                     guard self.backend.isTrusted, self.backend.displays() == displays else {
-                        self.status = .incomplete; return
+                        var report = result.report
+                        report.interrupted = self.backend.isTrusted ? .displayChanged : .permissionDenied
+                        self.restoreReport = report; self.status = .incomplete; return
                     }
-                    let retry = self.backend.restore(result.failed, displays: displays)
+                    let retry = self.backend.restore(result.failed, displays: displays, identityScope: saved.windows)
                     result.restored += retry.restored; result.skipped += retry.skipped; result.failed = retry.failed
+                    result.issues = retry.issues
                 }
-                guard self.backend.displays() == displays else { self.status = .incomplete; return }
+                self.restoreReport = result.report
+                guard self.backend.displays() == displays else {
+                    self.restoreReport?.interrupted = .displayChanged; self.status = .incomplete; return
+                }
                 // Closed or newly minimized/full-screen windows are deliberately skipped.
                 // Ambiguous identities and failed writes remain protected.
                 if result.failed.isEmpty && result.restored + result.skipped > 0 {
@@ -148,9 +165,10 @@ import WindowHelperProtocol
                         if let old, let data = try? JSONEncoder().encode(old) { self.defaults.set(data, forKey: Self.backupKey) }
                     }
                     self.setPending(false); self.setRestoreRequested(false); self.status = .restored(result.restored, result.skipped)
+                    self.observedDisplays = displays
                 } else {
                     self.setPending(true)
-                    self.status = result.failed.isEmpty ? .restored(result.restored, result.skipped) : .incomplete
+                    self.status = .incomplete
                 }
                 return
             }
@@ -190,6 +208,7 @@ import WindowHelperProtocol
             lastGood = current; defaults.set(backup, forKey: Self.backupKey)
         }
         current = candidate; defaults.set(encoded, forKey: Self.currentKey); status = .saved
+        observedDisplays = candidate.displays; restoreReport = nil
     }
     private func setRestoreRequested(_ value: Bool) { restoreRequested = value; defaults.set(value, forKey: Self.restoreKey) }
     private func setPending(_ value: Bool) { pending = value; defaults.set(value, forKey: Self.pendingKey) }
@@ -216,6 +235,6 @@ import WindowHelperProtocol
     }
     func report() -> WindowHelperState {
         WindowHelperState(enabled: enabled, busy: busy, phase: status, permission: permission,
-                          savedAt: snapshot?.date, backupAt: lastGood?.date, pending: pending, processID: getpid())
+                          savedAt: snapshot?.date, backupAt: lastGood?.date, pending: pending, processID: getpid(), restoreReport: restoreReport)
     }
 }

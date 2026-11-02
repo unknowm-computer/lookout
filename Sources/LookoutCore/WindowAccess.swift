@@ -27,3 +27,22 @@ extension WindowLayoutPhase {
         }
     }
 }
+
+extension WindowRestoreReport {
+    public var summary: String { L10n.text("\(restored)개 창 복원 · \(skipped)개 건너뜀 · \(failed)개 실패") }
+}
+
+extension WindowRestoreFailure {
+    public var message: String {
+        switch self {
+        case .ambiguousIdentity: L10n.text("같은 식별자·제목의 창이 여러 개여서 구분할 수 없습니다.")
+        case .windowNotFound: L10n.text("저장된 창을 찾지 못했습니다. 창 제목이 변경되었거나 닫혔을 수 있습니다.")
+        case .appUnresponsive: L10n.text("앱의 창 조회에 응답이 없거나 오류가 발생했습니다.")
+        case .timeBudget: L10n.text("복원 시간 제한에 도달했습니다. 다시 복원하면 재시도합니다.")
+        case .permissionDenied: L10n.text("창 접근 권한이 거부되었습니다.")
+        case .writeFailed: L10n.text("앱이 창의 위치·크기 변경을 허용하지 않았습니다.")
+        case .verificationFailed: L10n.text("변경 요청 후 창의 위치·크기가 저장된 배치와 일치하지 않습니다.")
+        case .displayChanged: L10n.text("복원 도중 모니터 작업 영역이 바뀌었습니다. 안정된 후 다시 복원해주세요.")
+        }
+    }
+}

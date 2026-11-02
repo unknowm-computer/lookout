@@ -56,6 +56,37 @@ struct WindowLayoutSettingsView: View {
                     }
                     Text(service.statusMessage).font(.system(size: 11)).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                    if let report = service.state?.restoreReport {
+                        Text(report.summary).font(.system(size: 11)).foregroundStyle(.secondary)
+                        if let interrupted = report.interrupted {
+                            Text(interrupted.message).font(.system(size: 11)).foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        if service.state?.pending == true {
+                            Text(L10n.text("복원이 완료되지 않아 새 배치 저장을 보류합니다. 기존 정상 배치는 유지됩니다."))
+                                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        }
+                        if !report.issues.isEmpty {
+                            DisclosureGroup(L10n.text("복원 실패 내역")) {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    ForEach(report.issues) { issue in
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(issue.title.isEmpty ? issue.app : issue.app + " · " + issue.title)
+                                                .lineLimit(2)
+                                            Text(issue.reason.message).foregroundStyle(.secondary)
+                                                .fixedSize(horizontal: false, vertical: true)
+                                            if let code = issue.errorCode {
+                                                Text("AXError: \(code)").foregroundStyle(.secondary)
+                                            }
+                                        }
+                                    }
+                                    if report.failed > report.issues.count {
+                                        Text(L10n.text("실패 내역은 최대 20개까지 표시합니다.")).foregroundStyle(.secondary)
+                                    }
+                                }
+                            }.font(.system(size: 11))
+                        }
+                    }
                 }
                 if let saved = service.savedAt {
                     HStack {
