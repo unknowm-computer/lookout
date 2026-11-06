@@ -415,6 +415,13 @@
 
 "저장 배치" = "Saved layout";
 
+"창 배치" = "Window Layout";
+"저장된 배치가 없습니다." = "No saved layout.";
+"저장된 배치 복원" = "Restore Saved Layout";
+"현재 배치 저장" = "Save Current Layout";
+"현재 배치를 저장할까요?" = "Save the current layout?";
+"기존 저장본은 이전 배치로 보관합니다." = "The existing snapshot will be kept as the previous layout.";
+
 "지금 복원" = "Restore now";
 
 "이전 정상 배치도 별도 백업으로 보관합니다." = "The previous stable layout is kept as a separate backup.";

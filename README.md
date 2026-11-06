@@ -2,9 +2,9 @@
 
 macOS의 ‘활성 상태 보기’에서 확인하는 시스템 상태와 프로세스 정보를 메뉴바에서 빠르게 볼 수 있는 앱입니다. 필요한 항목을 선택해 사용하고, 메뉴바 항목을 클릭해 상세 수치와 최근 그래프를 확인합니다.
 
-현재 구현 기준: 2026-10-29 · 버전 `0.6.3a` (build `10`). Swift·SwiftUI·AppKit 기반 macOS 네이티브 앱입니다.
+현재 구현 기준은 2026-11-06의 `0.6.4` (build `11`)입니다. Swift·SwiftUI·AppKit 기반 macOS 네이티브 앱입니다.
 
-현재 작업본에는 시스템 온도·팬 제어·helper 수동 설정·온도 알림·창 배치 자동 복원이 추가되어 있습니다. 버전은 아직 올리지 않았으며, 이 변경은 기존 GitHub `0.6.3a` Release에 포함되지 않습니다. 다음 배포에서 표시 버전과 내부 build를 함께 증가시켜야 합니다.
+`0.6.4`에는 시스템 온도·팬 제어·온도 알림, 창 배치 자동 복원과 상세 화면의 저장·복원 팝오버가 포함됩니다.
 
 | 문서 | 내용 |
 | --- | --- |
@@ -23,6 +23,8 @@ macOS의 ‘활성 상태 보기’에서 확인하는 시스템 상태와 프�
 개발 환경에서 Apple Silicon·macOS 27.0 실행을 확인했습니다. 2026-10-06 사용자 실기기 확인으로 Apple Silicon·Intel Mac 및 macOS 15·26에서도 정상 실행이 보고되었습니다. 기기·OS별 세부 조합과 기능별 검증 범위는 별도로 기록합니다.
 
 ## 창 배치 자동 복원
+
+기능을 켜면 메뉴바 상세와 독립 창 헤더에 **창 배치** 버튼이 나타납니다. 팝오버에서 마지막 저장 시각을 확인하고 현재 배치를 저장하거나 기존 배치와 이전 백업을 복원할 수 있습니다. 이미 저장본이 있는 상태에서 새로 저장하면 확인을 받은 뒤 이전 저장본을 백업합니다.
 
 설정 → 모니터링 하단의 `창 배치 자동 복원`에서 켭니다. **기본은 비활성화**입니다. 같은 영역의 `설정 복구` 버튼으로 전용 사용자 세션 도우미를 등록·연결합니다. macOS가 백그라운드 실행 허용을 요구하면 안내 버튼에서 허용하고 돌아오세요. 복구 과정에서 실제 손쉬운 사용 승인이 없으면 설정 화면으로 안내합니다. 그 화면에서 `LookoutWindowHelper`를 허용합니다. 팬 제어용 관리자 helper와 분리된 일반 사용자 권한의 도우미입니다.
 
@@ -180,7 +182,7 @@ SSD·시스템 온도를 제외한 여섯 항목의 `프로세스 · 최대 5개
 
 기본 빌드는 [현재 GitHub 저장소](https://github.com/unknowm-computer/lookout)의 최신 Release에서 `appcast.xml`을 읽습니다. 주소와 Ed25519 공개 키는 `Resources/UpdateConfiguration.json`에 보관하고 앱의 Info.plist에 포함합니다. 개인 키는 배포 Mac의 키체인에만 보관합니다. 별도 서버나 고정 IP는 필요하지 않습니다.
 
-[Lookout 0.6.3a Release](https://github.com/unknowm-computer/lookout/releases/tag/v0.6.3a)에서 배포 파일과 업데이트 피드를 제공합니다. GitHub 피드·공개 키가 포함된 0.6.0·0.6.1·0.6.2·0.6.3 앱은 앱 안에서 0.6.3a (build 10)로 업데이트할 수 있습니다. 업데이트 설정이 없던 기존 앱은 이번 DMG로 한 번 수동 설치합니다. 자동 확인은 기본 꺼짐이며 설치는 사용자가 선택합니다. Apple Silicon·macOS 27의 검증용 0.6.0 복사본에서 공개 GitHub 다운로드·앱 교체·0.6.1 재실행을 확인했습니다.
+[Lookout 0.6.4 Release](https://github.com/unknowm-computer/lookout/releases/tag/v0.6.4)에서 배포 파일과 업데이트 피드를 제공합니다. GitHub 피드와 공개 키가 포함된 0.6.0~0.6.3a 앱은 앱 안에서 0.6.4 (build 11) 업데이트를 확인할 수 있습니다. 업데이트 설정이 없던 기존 앱은 이번 DMG로 한 번 수동 설치합니다. 자동 확인은 기본 꺼짐이며 설치는 사용자가 선택합니다. Apple Silicon·macOS 27의 검증용 0.6.0 복사본에서 공개 GitHub 다운로드·앱 교체·0.6.1 재실행을 확인했습니다.
 
 다음 배포의 표시 버전·내부 build를 먼저 증가시킨 뒤 아래 명령을 실행합니다. GitHub에 자동 업로드하지 않습니다.
 
@@ -188,7 +190,7 @@ SSD·시스템 온도를 제외한 여섯 항목의 `프로세스 · 최대 5개
 python3 scripts/prepare-release.py
 ```
 
-`build/releases/v<version>-build<build>/`에 `Lookout-<version>.zip`, `Lookout-<version>.dmg`, `appcast.xml`, `SHA256SUMS.txt`가 생성됩니다. ZIP은 Sparkle 업데이트용, DMG는 최초·수동 설치용입니다. 게시된 `v0.6.3a-build10` 폴더와 태그는 덮어쓰지 않습니다. 게시 방법과 다음 버전 준비는 [GitHub 업데이트 배포 안내](docs/UPDATE_RELEASE.md)를 따릅니다.
+`build/releases/v<version>-build<build>/`에 `Lookout-<version>.zip`, `Lookout-<version>.dmg`, `appcast.xml`, `SHA256SUMS.txt`가 생성됩니다. ZIP은 Sparkle 업데이트용, DMG는 최초·수동 설치용입니다. 배포마다 새 버전의 폴더와 태그를 사용합니다. 게시 방법과 다음 버전 준비는 [GitHub 업데이트 배포 안내](docs/UPDATE_RELEASE.md)를 따릅니다.
 
 다른 배포 경로를 테스트하려면 `LOOKOUT_UPDATE_FEED_URL`과 `LOOKOUT_UPDATE_PUBLIC_KEY`를 함께 지정해 기본값을 덮어씁니다. 업데이트를 제외한 개발 빌드는 `LOOKOUT_DISABLE_UPDATES=1 bash scripts/build.sh`로 만듭니다. 배포 스크립트는 기본 GitHub 주소와 서명 키가 일치하는 빌드만 허용합니다.
 
@@ -238,7 +240,7 @@ pgrep -fl '/Lookout.app/Contents/MacOS/Lookout'
 bash scripts/create-dmg.sh
 ```
 
-현재 소스로 앱을 빌드한 뒤 `build/Lookout-0.6.3a.dmg`을 생성합니다. 파일명의 버전은 앱의 `CFBundleShortVersionString`을 따릅니다. 같은 버전으로 다시 만들면 기존 DMG를 교체합니다.
+현재 소스로 앱을 빌드한 뒤 `build/Lookout-0.6.4.dmg`을 생성합니다. 파일명의 버전은 앱의 `CFBundleShortVersionString`을 따릅니다. 같은 버전으로 다시 만들면 기존 DMG를 교체합니다.
 
 DMG에는 `Lookout.app`, `Applications` 바로가기, `Install Lookout.command`, `설치 안내.txt`가 들어갑니다. 개인용 설치 스크립트는 새 앱의 서명을 검사하고, 설치 위치의 실행 중인 Lookout을 종료한 뒤 교체합니다. 실패 시 보관한 기존 앱을 복구하며 설치가 끝나면 새 앱을 실행합니다.
 

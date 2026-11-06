@@ -98,7 +98,7 @@ struct WindowLayoutSettingsView: View {
                 }
                 HStack {
                     Button(L10n.text("현재 배치로 다시 시작")) { confirmsCurrentLayout = true }
-                        .disabled(!service.trusted || service.busy)
+                        .disabled(!service.canSave)
                     if service.backupAt != nil {
                         Button(L10n.text("이전 배치 복원")) { service.restoreNow(previous: true) }
                             .disabled(!service.canRestore)

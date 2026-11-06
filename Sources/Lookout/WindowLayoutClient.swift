@@ -46,6 +46,7 @@ import WindowHelperProtocol
     var savedAt: Date? { state?.savedAt }
     var backupAt: Date? { state?.backupAt }
     var canRestore: Bool { enabled && trusted && savedAt != nil && !busy }
+    var canSave: Bool { enabled && trusted && !busy }
     var statusMessage: String { state?.phase.message ?? L10n.text("창 배치 도우미 연결을 확인해주세요.") }
     func setEnabled(_ value: Bool) {
         guard enabled != value else { return }
@@ -77,7 +78,7 @@ import WindowHelperProtocol
     func openSystemSettings() { SMAppService.openSystemSettingsLoginItems() }
     func openAccessibilitySettings() { send(action: "permission") }
     func restoreNow(previous: Bool = false) { guard canRestore else { return }; send(action: previous ? "previous" : "restore") }
-    func useCurrentLayout() { guard enabled && trusted && !busy else { return }; send(action: "baseline") }
+    func useCurrentLayout() { guard canSave else { return }; send(action: "baseline") }
     func stop() {
         generation += 1
         requestsPermissionAfterSetup = false

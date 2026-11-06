@@ -4,7 +4,7 @@
 
 버전 수정과 Git push 이후 해당 버전의 배포 파일을 GitHub Release로 게시해야 업데이트를 제공할 수 있다. 소스만 업로드하면 앱에 새 업데이트가 나타나지 않는다.
 
-문서 기준은 2026-10-27이다. 마지막 게시 확인은 2026-10-12의 `0.6.3a` / build `10`이며, 현재 로컬 작업본도 같은 번호를 유지한다. 이후 시스템 온도·팬 helper·온도 알림 등은 아직 새 Release로 배포하지 않았다. 다음 배포 전 표시 버전과 내부 build를 증가시키며 기존 `v0.6.3a` 파일을 대체하지 않는다.
+이 문서의 배포 버전은 `0.6.4` (build `11`)이다.
 
 ```text
 https://github.com/unknowm-computer/lookout/releases/latest/download/appcast.xml
@@ -14,18 +14,18 @@ https://github.com/unknowm-computer/lookout/releases/latest/download/appcast.xml
 
 ## 1. 배포 파일 준비
 
-업데이트 연결은 `0.6.0` (build `6`)부터 포함한다. 다음 배포는 `Resources/Info.plist`의 `CFBundleShortVersionString`과 `CFBundleVersion`을 모두 증가시킨다. 예를 들어 다음 배포는 `0.6.4` / `11`로 준비할 수 있다. 이는 예시이며 이번 문서 정리에서 버전은 바꾸지 않았다. 표시 버전에는 `0.6.3a`처럼 소문자 한 글자 수정 접미사를 허용하지만 내부 build는 숫자로 증가시킨다. 이미 게시된 태그와 파일을 교체하지 않는다.
+업데이트 연결은 `0.6.0` (build `6`)부터 포함한다. 다음 배포는 `Resources/Info.plist`의 `CFBundleShortVersionString`과 `CFBundleVersion`을 모두 증가시킨다. 표시 버전에는 `0.6.3a`처럼 소문자 한 글자 수정 접미사를 허용하지만 내부 build는 숫자로 증가시킨다. 이미 게시된 태그와 파일을 교체하지 않는다.
 
 ```sh
 python3 scripts/prepare-release.py
 ```
 
-스크립트는 저장소 주소·서명 키 일치를 검사하고 helper를 포함한 앱·DMG를 빌드한 뒤 업데이트 ZIP 서명과 appcast를 생성한다. 결과 경로는 `build/releases/v<version>-build<build>/`다. 아래는 이미 게시한 `v0.6.3a-build10`의 파일명 예시이며 다음 배포에는 새 버전이 들어간다.
+스크립트는 저장소 주소·서명 키 일치를 검사하고 helper를 포함한 앱·DMG를 빌드한 뒤 업데이트 ZIP 서명과 appcast를 생성한다. 결과 경로는 `build/releases/v<version>-build<build>/`다. 아래는 `v0.6.4-build11`의 파일명이다.
 
 | 파일 | 용도 |
 | --- | --- |
-| `Lookout-0.6.3a.zip` | Sparkle가 다운로드·검증·설치할 앱 |
-| `Lookout-0.6.3a.dmg` | 최초 설치·수동 설치용 |
+| `Lookout-0.6.4.zip` | Sparkle가 다운로드·검증·설치할 앱 |
+| `Lookout-0.6.4.dmg` | 최초 설치·수동 설치용 |
 | `appcast.xml` | 버전·최소 OS·ZIP 주소·서명·크기 |
 | `SHA256SUMS.txt` | 생성한 세 파일의 SHA-256 확인 |
 
@@ -46,7 +46,7 @@ python3 scripts/prepare-release.py
 
 ## 3. 처음 설치와 후속 업데이트
 
-피드·공개 키가 없던 기존 앱은 새 버전을 찾을 수 없다. 이번 DMG로 한 번 수동 설치한 뒤 앱의 **설정 → 업데이트… → 업데이트 확인**을 사용한다. `0.6.0` / build `6`부터 `0.6.3` / build `9`까지의 앱은 이번 `0.6.3a` / build `10`을 새 업데이트로 판단한다. 같은 build `10` 앱은 최신 버전으로 판단하며 이후 배포는 build `11` 이상을 사용한다.
+피드·공개 키가 없던 기존 앱은 새 버전을 찾을 수 없다. 이번 DMG로 한 번 수동 설치한 뒤 앱의 **설정 → 업데이트… → 업데이트 확인**을 사용한다. `0.6.0` / build `6`부터 `0.6.3a` / build `10`까지의 앱은 `0.6.4` / build `11`을 새 업데이트로 판단한다. 후속 배포는 build `12` 이상을 사용한다.
 
 `새 버전 자동으로 확인`은 기본 꺼짐이다. 켜더라도 설치·재실행은 사용자가 선택한다. 앱 설정은 같은 Bundle ID를 유지하며 최근 기록은 재실행으로 초기화된다.
 
@@ -56,9 +56,9 @@ python3 scripts/prepare-release.py
 
 `LookoutFanHelper`와 `local.lookout.fan-helper.plist`는 앱 번들에 포함한다. 앱 자체의 ad-hoc 서명과 업데이트 ZIP의 Ed25519 서명은 역할이 다르며, ZIP 서명이 macOS 백그라운드 실행 승인을 대신하지 않는다.
 
-팬 제어를 이미 활성화한 사용자는 새 앱 시작·설정 진입/복귀·잠자기 복귀 시 등록한 앱 서명을 확인해 helper를 자동 갱신한다. 최초 사용자를 자동 등록하지 않는다. macOS가 재승인을 요구하면 앱에 허용 안내를 표시하고, 사용자가 시스템 설정에서 허용한 뒤 돌아오면 갱신과 저장 모드 적용을 이어간다. 일반 실패는 횟수를 제한한 복구 뒤 오류와 다시 시도를 제공한다.
+팬 제어와 창 배치 도우미는 등록 상태와 내장 도우미의 서명을 확인한다. 도우미를 처음 사용하거나 등록·연결을 복구할 때는 각 기능의 `설정 복구` 버튼을 사용한다. macOS가 백그라운드 실행이나 손쉬운 사용 승인을 요구하면 시스템 설정에서 허용한다. 기존 승인 여부는 앱의 연결·창 조회 상태로 확인할 수 있다.
 
-배포 검증에서는 새 앱의 버전, 앱/내장 helper의 Universal 아키텍처·중첩 서명, 실제 Sparkle 교체·재실행, helper 자동 갱신 또는 OS 재승인 안내, 기존 팬 설정 유지와 시스템 자동 복귀를 확인한다. 로컬 앱 대치 시험을 실제 Sparkle 업데이트 검증으로 대신하지 않는다. 현재 새 팬 기능을 포함한 Release와 해당 업데이트 경로는 미검증이다.
+배포 검증에서는 새 앱의 버전, 앱과 내장 도우미의 Universal 아키텍처·중첩 서명, 실제 Sparkle 교체·재실행, 도우미 연결과 OS 승인 상태를 확인한다. `0.6.4`의 실제 Sparkle 설치·재실행과 팬 제어 상태 복구는 실기기 검증 항목이다.
 
 ## 참고
 

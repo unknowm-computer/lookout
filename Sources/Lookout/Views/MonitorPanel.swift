@@ -37,7 +37,7 @@ struct MonitorPanel: View {
             HStack {
                 Text("LOOKOUT").font(.system(size: 10, weight: .semibold)).tracking(1.6)
                 Spacer()
-                Text(metrics == [.ssd] ? L10n.text("저장공간") : L10n.text("최근 5분")).font(.system(size: 10)).foregroundStyle(.secondary)
+                WindowLayoutPanelAction(service: monitor.windowLayout, presented: presented)
                 if let onDetach {
                     Button(action: onDetach) {
                         Image(systemName: "arrow.up.right.square")
