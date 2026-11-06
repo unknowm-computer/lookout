@@ -51,37 +51,43 @@ import WindowHelperProtocol
     func setEnabled(_ value: Bool) {
         guard enabled != value else { return }
         enabled = value; defaults.set(value, forKey: Self.enabledKey)
-        if value { refresh() } else { stop() }
+        if value { install() } else { stop() }
     }
     func refresh() {
         maintenance.refresh()
         guard enabled, !maintenance.updating else { return }
-        guard registration == .enabled && !needsRefresh else { stop(); return }
+        guard registration == .enabled && !needsRefresh else {
+            if registration == .requiresApproval { disconnect() }
+            else { stop() }
+            return
+        }
         guard !connecting else { return }
         send(action: connected ? "refresh" : nil)
     }
-    /// Manual only. Restarts the service connection; no Accessibility approval is synthesized.
+    /// Runs after the user enables the feature or asks to repair it.
     func install() {
-        guard !busy else { return }
+        guard enabled, !connecting, state?.busy != true else { return }
+        requestsPermissionAfterSetup = true
+        guard !maintenance.updating else { return }
         maintenance.refresh()
-        guard registration != .requiresApproval else { openSystemSettings(); return }
+        guard registration != .requiresApproval else { return }
         if registration == .enabled && !needsRefresh && connectionError == nil && maintenance.error == nil {
-            if connected && !trusted { openAccessibilitySettings() }
-            else { refresh() }
+            refresh()
             return
         }
         let repairConnection = connectionError != nil || maintenance.error != nil
-        stop(); connectionError = nil
-        requestsPermissionAfterSetup = true
+        disconnect(); connectionError = nil
         maintenance.activate(force: repairConnection)
     }
     func openSystemSettings() { SMAppService.openSystemSettingsLoginItems() }
-    func openAccessibilitySettings() { send(action: "permission") }
     func restoreNow(previous: Bool = false) { guard canRestore else { return }; send(action: previous ? "previous" : "restore") }
     func useCurrentLayout() { guard canSave else { return }; send(action: "baseline") }
     func stop() {
-        generation += 1
         requestsPermissionAfterSetup = false
+        disconnect()
+    }
+    private func disconnect() {
+        generation += 1
         connection?.invalidationHandler = nil; connection?.interruptionHandler = nil
         connection?.invalidate(); connection = nil; events = nil; state = nil; connecting = false
     }
@@ -91,6 +97,7 @@ import WindowHelperProtocol
         let token = generation
         Task {
             defer { if generation == token { connecting = false } }
+            guard generation == token else { return }
             do {
                 let data = try await request(action: action, token: token)
                 guard generation == token else { return }

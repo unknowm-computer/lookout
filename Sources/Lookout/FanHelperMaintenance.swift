@@ -51,7 +51,7 @@ enum HelperServiceKind {
         if status != latest { status = latest }
         if latest == .requiresApproval { error = nil }
     }
-    /// Invoked only by the setup/update/retry button. OS approval remains a separate user action.
+    /// Invoked after an explicit setup action. OS approval remains a separate user action.
     func activate(force: Bool = false) {
         guard !updating else { return }
         refresh()
@@ -70,7 +70,12 @@ enum HelperServiceKind {
                 }
                 // A delayed OS consent change must not be replaced by another registration request.
                 if service.status == .requiresApproval { refresh(); return }
-                try service.register()
+                do {
+                    try service.register()
+                } catch {
+                    // Registration can succeed while macOS denies launch pending approval.
+                    guard service.status == .requiresApproval else { throw error }
+                }
                 try await settle()
                 refresh()
                 if status == .enabled || status == .requiresApproval {

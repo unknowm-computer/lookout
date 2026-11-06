@@ -9,16 +9,50 @@ import Testing
     let name = "LookoutTests.windowHelper.\(UUID().uuidString)"
     return (name, try #require(UserDefaults(suiteName: name)))
 }
-@Test @MainActor func windowHelperDoesNotRegisterOrConnectUntilUserEnablesAndSetsItUp() throws {
+@Test @MainActor func enablingWindowLayoutRegistersAndOnlyRequestsMissingAccess() async throws {
+    for allowed in [true, false] {
+        let (name, defaults) = try windowDefaults(); defer { defaults.removePersistentDomain(forName: name) }
+        let registration = FakeFanHelperRegistration(status: .notRegistered)
+        let proxy = WindowRecoveryProxy(allowed: allowed)
+        let client = WindowLayoutClient(defaults: defaults, revision: "new", registrationService: registration,
+            settle: { await Task.yield() }, requestOverride: proxy.request)
+        defer { client.stop() }
+
+        client.refresh()
+        #expect(registration.registrations == 0 && proxy.actions.isEmpty && !client.busy)
+        client.setEnabled(true)
+        for _ in 0..<100 where !client.connected || client.busy { try await Task.sleep(for: .milliseconds(2)) }
+
+        #expect(registration.registrations == 1 && registration.unregistrations == 0)
+        #expect(client.connected && client.trusted == allowed)
+        #expect(proxy.actions == (allowed ? ["configure"] : ["configure", "permission"]))
+    }
+}
+
+@Test(arguments: [true, false], [true, false])
+@MainActor func windowSetupResumesAfterBackgroundApprovalUnlessTurnedOff(staysEnabled: Bool, reportsLaunchDenied: Bool) async throws {
     let (name, defaults) = try windowDefaults(); defer { defaults.removePersistentDomain(forName: name) }
     let registration = FakeFanHelperRegistration(status: .notRegistered)
-    var connections = 0
-    enum Unexpected: Error { case connection }
+    registration.registerStatus = .requiresApproval
+    enum RegistrationError: Error { case launchDenied }
+    if reportsLaunchDenied { registration.registerError = RegistrationError.launchDenied }
+    let proxy = WindowRecoveryProxy(allowed: false)
     let client = WindowLayoutClient(defaults: defaults, revision: "new", registrationService: registration,
-        connectionFactory: { connections += 1; throw Unexpected.connection })
-    client.refresh(); client.setEnabled(true); client.refresh(); client.setEnabled(false)
-    #expect(registration.registrations == 0 && registration.unregistrations == 0)
-    #expect(connections == 0 && !client.connected && !client.trusted && !client.canRestore)
+        settle: { await Task.yield() }, requestOverride: proxy.request)
+    defer { client.stop() }
+
+    client.setEnabled(true)
+    for _ in 0..<100 where client.busy { try await Task.sleep(for: .milliseconds(2)) }
+    client.refresh()
+    #expect(client.registration == .requiresApproval && proxy.actions.isEmpty)
+
+    if !staysEnabled { client.setEnabled(false) }
+    registration.status = .enabled
+    client.refresh()
+    for _ in 0..<100 where client.busy { try await Task.sleep(for: .milliseconds(2)) }
+    #expect(client.connected == staysEnabled)
+    #expect(registration.registrations == 1 && registration.unregistrations == 0)
+    #expect(proxy.actions == (staysEnabled ? ["configure", "permission"] : []))
 }
 @Test @MainActor func windowAndFanRegistrationRevisionRecordsAreIndependent() async throws {
     let (name, defaults) = try windowDefaults(); defer { defaults.removePersistentDomain(forName: name) }
@@ -148,6 +182,12 @@ private final class WindowRecoveryProxy: NSObject, WindowHelperProtocol, @unchec
     let allowed: Bool
     init(allowed: Bool) { self.allowed = allowed }
     var actions: [String] { lock.lock(); defer { lock.unlock() }; return calls }
+    @MainActor func request(_ action: String?, _ enabled: Bool, _ legacy: Data?) async -> Data? {
+        await withCheckedContinuation { continuation in
+            if let action { perform(action) { continuation.resume(returning: $0) } }
+            else { configure(enabled, legacy: legacy) { continuation.resume(returning: $0) } }
+        }
+    }
     private func respond(_ action: String, _ reply: @escaping @Sendable (Data?) -> Void) {
         lock.lock(); calls.append(action); lock.unlock()
         let value = WindowHelperState(enabled: true, busy: false, phase: allowed ? .ready : .permission,
@@ -167,12 +207,7 @@ private final class WindowRecoveryProxy: NSObject, WindowHelperProtocol, @unchec
         let registration = FakeFanHelperRegistration(status: .enabled)
         let proxy = WindowRecoveryProxy(allowed: allowed)
         let client = WindowLayoutClient(defaults: defaults, revision: "same", registrationService: registration,
-            requestOverride: { action, enabled, legacy in
-                await withCheckedContinuation { continuation in
-                    if let action { proxy.perform(action) { continuation.resume(returning: $0) } }
-                    else { proxy.configure(enabled, legacy: legacy) { continuation.resume(returning: $0) } }
-                }
-            })
+            requestOverride: proxy.request)
         defer { client.stop() }
         for _ in 0..<100 where client.busy { try await Task.sleep(for: .milliseconds(2)) }
         #expect(client.connected && client.trusted == allowed)
@@ -191,12 +226,7 @@ private final class WindowRecoveryProxy: NSObject, WindowHelperProtocol, @unchec
         let registration = FakeFanHelperRegistration(status: .enabled)
         let proxy = WindowRecoveryProxy(allowed: allowed)
         let client = WindowLayoutClient(defaults: defaults, revision: "new", registrationService: registration,
-            settle: { await Task.yield() }, requestOverride: { action, enabled, legacy in
-                await withCheckedContinuation { continuation in
-                    if let action { proxy.perform(action) { continuation.resume(returning: $0) } }
-                    else { proxy.configure(enabled, legacy: legacy) { continuation.resume(returning: $0) } }
-                }
-            })
+            settle: { await Task.yield() }, requestOverride: proxy.request)
         defer { client.stop() }
         client.install(); client.install()
         for _ in 0..<100 where !client.connected || client.busy { try await Task.sleep(for: .milliseconds(2)) }
