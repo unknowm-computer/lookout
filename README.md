@@ -2,9 +2,9 @@
 
 macOS의 ‘활성 상태 보기’에서 확인하는 시스템 상태와 프로세스 정보를 메뉴바에서 빠르게 볼 수 있는 앱입니다. 필요한 항목을 선택해 사용하고, 메뉴바 항목을 클릭해 상세 수치와 최근 그래프를 확인합니다.
 
-현재 소스 기준은 2026-11-12이며, 앱 버전 표기는 `0.6.4` (build `11`)입니다. Swift·SwiftUI·AppKit 기반 macOS 네이티브 앱입니다.
+현재 소스 기준은 2026-11-12이며, 앱 버전은 `0.6.5` (build `12`)입니다. Swift·SwiftUI·AppKit 기반 macOS 네이티브 앱입니다.
 
-`0.6.4` 공개 이후 소스에는 창 배치 저장 개선·미리보기·진단 로그와 고정 자체 서명이 추가됐습니다. 현재 설치본에는 반영했지만 새 Release는 아직 게시하지 않았습니다. 다음 배포에서는 버전과 build를 올립니다.
+`0.6.5`에는 창 배치 저장 개선·미리보기·진단 로그와 Lookout 전용 고정 자체 서명이 포함됩니다. 기존 Sparkle 공개 키와 피드 주소를 유지합니다.
 
 | 문서 | 내용 |
 | --- | --- |
@@ -197,7 +197,7 @@ SSD·시스템 온도를 제외한 여섯 항목의 `프로세스 · 최대 5개
 
 기본 빌드는 [현재 GitHub 저장소](https://github.com/unknowm-computer/lookout)의 최신 Release에서 `appcast.xml`을 읽습니다. 주소와 Ed25519 공개 키는 `Resources/UpdateConfiguration.json`에 보관하고 앱의 Info.plist에 포함합니다. 개인 키는 배포 Mac의 키체인에만 보관합니다. 별도 서버나 고정 IP는 필요하지 않습니다.
 
-[Lookout 0.6.4 Release](https://github.com/unknowm-computer/lookout/releases/tag/v0.6.4)에서 배포 파일과 업데이트 피드를 제공합니다. GitHub 피드와 공개 키가 포함된 0.6.0~0.6.3a 앱은 앱 안에서 0.6.4 (build 11) 업데이트를 확인할 수 있습니다. 업데이트 설정이 없던 기존 앱은 이번 DMG로 한 번 수동 설치합니다. 자동 확인은 기본 꺼짐이며 설치는 사용자가 선택합니다. Apple Silicon·macOS 27의 검증용 0.6.0 복사본에서 공개 GitHub 다운로드·앱 교체·0.6.1 재실행을 확인했습니다.
+[Lookout 0.6.5 Release](https://github.com/unknowm-computer/lookout/releases/tag/v0.6.5)에서 배포 파일과 업데이트 피드를 제공합니다. GitHub 피드와 공개 키가 포함된 0.6.0~0.6.4 앱은 앱 안에서 0.6.5 (build 12) 업데이트를 확인할 수 있습니다. 업데이트 설정이 없던 기존 앱은 이번 DMG로 한 번 수동 설치합니다. 자동 확인은 기본 꺼짐이며 설치는 사용자가 선택합니다. Apple Silicon·macOS 27의 검증용 0.6.0 복사본에서 공개 GitHub 다운로드·앱 교체·0.6.1 재실행을 확인했습니다.
 
 다음 배포의 표시 버전·내부 build를 먼저 증가시킨 뒤 아래 명령을 실행합니다. GitHub에 자동 업로드하지 않습니다.
 
@@ -255,7 +255,7 @@ pgrep -fl '/Lookout.app/Contents/MacOS/Lookout'
 bash scripts/create-dmg.sh
 ```
 
-현재 소스로 앱을 빌드한 뒤 `build/Lookout-0.6.4.dmg`을 생성합니다. 파일명의 버전은 앱의 `CFBundleShortVersionString`을 따릅니다. 같은 버전으로 다시 만들면 기존 DMG를 교체합니다.
+현재 소스로 앱을 빌드한 뒤 `build/Lookout-0.6.5.dmg`을 생성합니다. 파일명의 버전은 앱의 `CFBundleShortVersionString`을 따릅니다. 같은 버전으로 다시 만들면 기존 DMG를 교체합니다.
 
 DMG에는 `Lookout.app`, `Applications` 바로가기, `Install Lookout.command`, `설치 안내.txt`가 들어갑니다. 개인용 설치 스크립트는 새 앱의 서명을 검사하고, 설치 위치의 실행 중인 Lookout을 종료한 뒤 교체합니다. 실패 시 보관한 기존 앱을 복구하며 설치가 끝나면 새 앱을 실행합니다.
 
@@ -281,7 +281,7 @@ Finder에서 앱을 `Applications`로 드래그하고 `대치`하는 기존 설�
 
 같은 Bundle ID의 앱만 교체하면 기존 모니터링·그래프·알림·메뉴바 설정은 유지됩니다. 최근 5분 기록과 프로세스 펼침 상태는 메모리 데이터이므로 재실행 시 초기화됩니다. 개발 중에는 DMG 없이 `build/Lookout.app`을 응용 프로그램 폴더에 복사해 교체해도 됩니다. 개발 폴더에서 새 앱을 실행하는 것만으로 기존 `/Applications/Lookout.app`이 갱신되지는 않습니다.
 
-앞으로 생성하는 배포 DMG에는 Lookout 전용 고정 자체 서명 앱이 들어갑니다. 기존 공개 Release는 이전 서명 방식을 유지합니다. 현재 작업본의 최근 변경으로 DMG를 다시 만들거나 게시하지는 않았습니다. 개인·소규모 지인 배포는 위 설치 스크립트를 사용하며, 일반 배포가 필요해지면 Developer ID 서명과 Apple 공증을 별도로 진행합니다. DMG 생성이나 설치 스크립트 추가만으로 공증·Sparkle 업데이트 배포 설정이 완료되지는 않습니다.
+0.6.5부터 배포 DMG에는 Lookout 전용 고정 자체 서명 앱이 들어갑니다. 0.6.4까지의 기존 Release는 이전 서명 방식을 유지합니다. 최초 전환에서는 팬·창 도우미의 등록 복구나 OS 권한 재승인이 필요할 수 있습니다. 개인·소규모 지인 배포는 위 설치 스크립트를 사용하며, 일반 배포가 필요해지면 Developer ID 서명과 Apple 공증을 별도로 진행합니다. DMG 생성이나 설치 스크립트 추가만으로 공증·Sparkle 업데이트 배포 설정이 완료되지는 않습니다.
 
 ## 테스트와 검증
 
