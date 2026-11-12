@@ -5,6 +5,7 @@ import ServiceManagement
 struct WindowLayoutSettingsView: View {
     @ObservedObject var service: WindowLayoutClient
     @State private var confirmsCurrentLayout = false
+    @State private var hoveringSavedLayout = false
     @Environment(\.appearsActive) private var appearsActive
     private var needsPermissionCheck: Bool {
         !service.trusted || service.state?.permission.query != .allowed
@@ -62,10 +63,6 @@ struct WindowLayoutSettingsView: View {
                             Text(interrupted.message).font(.system(size: 11)).foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
-                        if service.state?.pending == true {
-                            Text(L10n.text("복원이 완료되지 않아 새 배치 저장을 보류합니다. 기존 정상 배치는 유지됩니다."))
-                                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                        }
                         if !report.issues.isEmpty {
                             DisclosureGroup(L10n.text("복원 실패 내역")) {
                                 VStack(alignment: .leading, spacing: 8) {
@@ -90,11 +87,40 @@ struct WindowLayoutSettingsView: View {
                 }
                 if let saved = service.savedAt {
                     HStack {
-                        Text(L10n.text("저장 배치")).foregroundStyle(.secondary)
-                        Text(saved, format: .dateTime.month().day().hour().minute()).foregroundStyle(.secondary)
+                        HStack(spacing: 6) {
+                            if service.savedPreviewAt != nil {
+                                Image(systemName: "photo").accessibilityHidden(true)
+                            }
+                            Text(L10n.text("저장 배치"))
+                            Text(saved, format: .dateTime.month().day().hour().minute())
+                        }
+                        .foregroundStyle(.secondary)
+                        .modifier(WindowLayoutPreviewHover(service: service, hovering: $hoveringSavedLayout))
                         Spacer(minLength: 4)
                         Button(L10n.text("지금 복원")) { service.restoreNow() }.disabled(!service.canRestore)
                     }.font(.system(size: 11))
+                }
+                if let notice = service.saveNotice {
+                    Text(notice).font(.system(size: 11)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if service.connected {
+                    Toggle(L10n.text("저장 배치 화면 미리보기"), isOn: Binding(
+                        get: { service.state?.previewEnabled == true }, set: { service.setPreviewEnabled($0) }
+                    )).toggleStyle(.checkbox).disabled(service.connecting)
+                    if service.state?.previewEnabled == true {
+                        Text(L10n.text("배치를 저장할 때 모니터별 화면을 작게 캡처해 이 Mac에 보관합니다. 옵션을 끄면 미리보기를 지웁니다."))
+                            .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        if service.state?.screenRecordingAllowed != true {
+                            HStack {
+                                Text(L10n.text("Lookout 창 배치 도우미의 화면 기록 권한이 필요합니다."))
+                                    .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                                Spacer(minLength: 4)
+                                Button(L10n.text("화면 기록 권한 설정")) { service.requestPreviewPermission() }
+                                    .disabled(service.connecting)
+                            }.font(.system(size: 11))
+                        }
+                    }
                 }
                 HStack {
                     Button(L10n.text("현재 배치로 다시 시작")) { confirmsCurrentLayout = true }
@@ -103,6 +129,9 @@ struct WindowLayoutSettingsView: View {
                         Button(L10n.text("이전 배치 복원")) { service.restoreNow(previous: true) }
                             .disabled(!service.canRestore)
                     }
+                    Spacer(minLength: 4)
+                    Button(L10n.text("진단 로그 저장")) { service.exportDiagnostics() }
+                        .disabled(!service.connected || service.exportingDiagnostics)
                 }.font(.system(size: 11))
                 if service.backupAt != nil {
                     Text(L10n.text("이전 정상 배치도 별도 백업으로 보관합니다."))
@@ -114,7 +143,7 @@ struct WindowLayoutSettingsView: View {
             Button(L10n.text("취소"), role: .cancel) {}
             Button(L10n.text("저장")) { service.useCurrentLayout() }
         } message: {
-            Text(L10n.text("모니터 구성을 변경했거나 창을 새로 정리한 경우 현재 배치를 저장할 수 있습니다. 기존 저장본은 이전 배치로 보관합니다."))
+            Text(L10n.text("모니터 구성을 변경했거나 창을 새로 정리한 경우 현재 배치를 저장할 수 있습니다. 이전 정상 배치도 별도 백업으로 보관합니다."))
         }
         .onAppear { service.refresh() }
         .onChange(of: appearsActive) { _, active in if active { service.refresh() } }

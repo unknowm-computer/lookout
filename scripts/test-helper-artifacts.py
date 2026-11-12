@@ -29,8 +29,11 @@ class HelperArtifactsTests(unittest.TestCase):
             for path in resources: self.write(path, path)
     def write(self, path, value):
         file = self.root / path; file.parent.mkdir(parents=True, exist_ok=True); file.write_text(value)
-    def key(self, kind='fan', toolchain='toolchain'):
-        return helpers.fingerprint(self.root, self.package, kind, toolchain)
+    def key(self, kind='fan', toolchain='toolchain', identity='A' * 40):
+        return helpers.fingerprint(self.root, self.package, kind, toolchain, identity)
+    def test_signing_identity_separates_helper_cache(self):
+        for kind in helpers.KINDS:
+            self.assertNotEqual(self.key(kind), self.key(kind, identity='B' * 40))
     def test_app_ui_localization_and_version_do_not_change_helper_keys(self):
         keys = [self.key(kind) for kind in helpers.KINDS]
         self.write('Sources/Lookout/main.swift', 'UI edit')
@@ -61,7 +64,7 @@ class HelperArtifactsTests(unittest.TestCase):
     def test_reuses_exact_signed_bytes_and_rejects_corrupted_cache(self):
         cache, app = self.root / 'cache', self.root / 'App'
         builds = []
-        def prepare(root, bin_dir, stage, kind):
+        def prepare(root, bin_dir, stage, kind, identity):
             builds.append(kind)
             product = helpers.KINDS[kind][0]
             result = stage / (product + ('.app' if kind == 'window' else ''))
@@ -70,7 +73,7 @@ class HelperArtifactsTests(unittest.TestCase):
             else: result.write_bytes(b'fan signature')
             return result
         with patch.object(helpers, 'prepare', side_effect=prepare), patch.object(helpers, 'verify'):
-            def package(): helpers.package_helpers(self.root, self.root, app, self.package, cache, 'toolchain')
+            def package(): helpers.package_helpers(self.root, self.root, app, self.package, cache, 'toolchain', 'A' * 40)
             package(); expected = helpers.tree(app)
             package(); self.assertEqual(builds, ['fan', 'window']); self.assertEqual(expected, helpers.tree(app))
             artifact = next(cache.glob('fan/*/LookoutFanHelper')); artifact.write_bytes(b'corrupted')

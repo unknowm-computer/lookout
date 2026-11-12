@@ -7,9 +7,12 @@ fi
 
 export CLANG_MODULE_CACHE_PATH="$PWD/.build/clang-cache"
 export SWIFTPM_MODULECACHE_OVERRIDE="$PWD/.build/module-cache"
+# Fail before touching the previous build if the fixed identity is unavailable.
+python3 scripts/code_signing.py prepare
 mkdir -p build
-task_info_plist=$(mktemp "$PWD/build/Lookout-info.XXXXXX")
-trap 'rm -f "$task_info_plist"' EXIT
+task_staging=$(mktemp -d "$PWD/build/.lookout-build.XXXXXX")
+trap 'rm -rf "$task_staging"' EXIT
+task_info_plist="$task_staging/Lookout-info.plist"
 python3 scripts/configure-updates.py Resources/Info.plist "$task_info_plist"
 
 task_verify_universal() {
@@ -29,8 +32,8 @@ task_bin_dir=$(xcrun swift build "${task_swift_build_args[@]}" --show-bin-path)
 task_verify_universal "$task_bin_dir/Lookout"
 # Keep crash-symbolication data outside the installed bundle. Preserve exported symbols
 # and Swift runtime metadata while removing local/debug symbols from the shipped binary.
-xcrun dsymutil "$task_bin_dir/Lookout" -o "$PWD/build/Lookout.app.dSYM"
-task_app_dir="$PWD/build/Lookout.app"
+xcrun dsymutil "$task_bin_dir/Lookout" -o "$task_staging/Lookout.app.dSYM"
+task_app_dir="$task_staging/Lookout.app"
 mkdir -p "$task_app_dir/Contents/MacOS" "$task_app_dir/Contents/Resources"
 cp "$task_bin_dir/Lookout" "$task_app_dir/Contents/MacOS/Lookout.new"
 xcrun strip -x -S "$task_app_dir/Contents/MacOS/Lookout.new"
@@ -62,6 +65,11 @@ iconutil -c icns build/AppIcon.iconset -o "$task_app_dir/Contents/Resources/AppI
 # Preserve signed helper identities independently of app UI/version/localization changes.
 xcrun swift package --disable-sandbox --cache-path .build/cache --config-path .build/config --security-path .build/security dump-package > .build/helper-package.json
 python3 scripts/package-helpers.py --bin-dir "$task_bin_dir" --app "$task_app_dir" --package .build/helper-package.json
-codesign --force --sign - "$task_app_dir"
-codesign --verify --deep --strict "$task_app_dir"
+python3 scripts/code_signing.py sign "$task_app_dir"
+python3 scripts/code_signing.py verify-bundle "$task_app_dir"
+# Replace only a fully verified result; failures leave the earlier build intact.
+python3 scripts/publish-build.py "$task_app_dir" "$PWD/build/Lookout.app"
+rm -rf "$PWD/build/Lookout.app.dSYM"
+mv "$task_staging/Lookout.app.dSYM" "$PWD/build/Lookout.app.dSYM"
+task_app_dir="$PWD/build/Lookout.app"
 printf 'Built Universal (arm64 + x86_64) %s\n' "$task_app_dir"

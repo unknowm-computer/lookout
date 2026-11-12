@@ -4,7 +4,7 @@
 
 버전 수정과 Git push 이후 해당 버전의 배포 파일을 GitHub Release로 게시해야 업데이트를 제공할 수 있다. 소스만 업로드하면 앱에 새 업데이트가 나타나지 않는다.
 
-이 문서의 배포 버전은 `0.6.4` (build `11`)이다.
+아래 파일명 예시는 기존 공개 버전 `0.6.4` (build `11`) 기준이다. 2026-11-12의 창 배치 저장·미리보기·진단 로그·고정 자체 서명 변경은 아직 새 Release로 배포하지 않았다. 현재 소스의 버전 표기도 `0.6.4` / `11`이므로 다음 배포 전에 둘 다 증가시킨다.
 
 ```text
 https://github.com/unknowm-computer/lookout/releases/latest/download/appcast.xml
@@ -20,7 +20,7 @@ https://github.com/unknowm-computer/lookout/releases/latest/download/appcast.xml
 python3 scripts/prepare-release.py
 ```
 
-스크립트는 저장소 주소·서명 키 일치를 검사하고 helper를 포함한 앱·DMG를 빌드한 뒤 업데이트 ZIP 서명과 appcast를 생성한다. 결과 경로는 `build/releases/v<version>-build<build>/`다. 아래는 `v0.6.4-build11`의 파일명이다.
+스크립트는 저장소 주소·Sparkle 서명 키 일치를 검사하고 helper를 포함한 앱·DMG를 빌드한 뒤 업데이트 ZIP 서명과 appcast를 생성한다. 앱 및 ZIP을 다시 푼 본체·두 도우미가 프로젝트에 고정된 인증서로 서명됐는지도 검증한다. 결과 경로는 `build/releases/v<version>-build<build>/`다. 아래는 `v0.6.4-build11`의 파일명이다.
 
 | 파일 | 용도 |
 | --- | --- |
@@ -50,13 +50,13 @@ python3 scripts/prepare-release.py
 
 `새 버전 자동으로 확인`은 기본 꺼짐이다. 켜더라도 설치·재실행은 사용자가 선택한다. 앱 설정은 같은 Bundle ID를 유지하며 최근 기록은 재실행으로 초기화된다.
 
-현재 앱은 개인용 ad-hoc 서명이며 ZIP에 별도 Ed25519 서명을 적용한다. 최초 수동 설치는 README의 개인용 설치 절차를 사용한다. 0.6.1 Release 게시 후 Apple Silicon·macOS 27에서 검증용 0.6.0 복사본의 공개 피드 조회·다운로드·설치·0.6.1 재실행을 확인했다. Intel 및 macOS 15·26의 실제 업데이트·보안 처리 동작은 별도 실기기 확인이 필요하다.
+현재 소스로 만드는 앱은 Lookout 전용 고정 자체 서명을 사용하며 ZIP에는 기존 Ed25519 서명을 별도로 적용한다. 기존 공개 Release의 ad-hoc 서명에서 최초 전환 시 OS 재승인이 필요할 수 있다. 자세한 키 준비·보관·검증 절차는 [코드 서명](CODE_SIGNING.md)을 따른다. 최초 수동 설치는 README의 개인용 설치 절차를 사용한다. 0.6.1 Release 게시 후 Apple Silicon·macOS 27에서 검증용 0.6.0 복사본의 공개 피드 조회·다운로드·설치·0.6.1 재실행을 확인했다. Intel 및 macOS 15·26의 실제 업데이트·보안 처리 동작은 별도 실기기 확인이 필요하다.
 
-## 4. 팬 helper를 포함한 업데이트
+## 4. 팬·창 배치 helper를 포함한 업데이트
 
-`LookoutFanHelper`와 `local.lookout.fan-helper.plist`는 앱 번들에 포함한다. 앱 자체의 ad-hoc 서명과 업데이트 ZIP의 Ed25519 서명은 역할이 다르며, ZIP 서명이 macOS 백그라운드 실행 승인을 대신하지 않는다.
+`LookoutFanHelper`와 `local.lookout.fan-helper.plist`는 앱 번들에 포함한다. 앱 자체의 고정 인증서 서명과 업데이트 ZIP의 Ed25519 서명은 역할이 다르며, ZIP 서명이 macOS 백그라운드 실행 승인을 대신하지 않는다.
 
-팬 제어와 창 배치 도우미는 등록 상태와 내장 도우미의 서명을 확인한다. 창 배치 체크박스를 켜면 도우미 등록과 권한 확인을 시작한다. 팬 제어의 최초 설정과 두 도우미의 연결 복구에는 각 기능의 `설정 복구` 버튼을 사용한다. macOS가 백그라운드 실행이나 손쉬운 사용 승인을 요구하면 시스템 설정에서 허용한다. 기존 승인 여부는 앱의 연결·창 조회 상태로 확인할 수 있다.
+팬 제어와 창 배치 도우미는 등록 상태와 내장 도우미의 서명을 확인한다. 창 배치 체크박스를 켜면 도우미 등록과 권한 확인을 시작한다. 팬 제어의 최초 설정과 두 도우미의 연결 복구에는 각 기능의 `설정 복구` 버튼을 사용한다. macOS가 백그라운드 실행이나 손쉬운 사용 승인을 요구하면 시스템 설정에서 허용한다. 화면 미리보기를 사용하는 경우에만 화면 기록도 별도로 허용한다. 기존 승인 여부는 앱의 연결·창 조회 상태로 확인할 수 있다.
 
 배포 검증에서는 새 앱의 버전, 앱과 내장 도우미의 Universal 아키텍처·중첩 서명, 실제 Sparkle 교체·재실행, 도우미 연결과 OS 승인 상태를 확인한다. `0.6.4`의 실제 Sparkle 설치·재실행과 팬 제어 상태 복구는 실기기 검증 항목이다.
 

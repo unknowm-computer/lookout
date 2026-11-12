@@ -3,3 +3,9 @@ build/
 .swiftpm/
 .DS_Store
 __pycache__/
+# Private code-signing material belongs outside the checkout.
+*.keychain-db
+*.keychain-db-*
+*.p12
+*.pfx
+private.pem

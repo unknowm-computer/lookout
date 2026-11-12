@@ -11,3 +11,4 @@ xcrun swift test --disable-sandbox --cache-path .build/cache --config-path .buil
 bash scripts/test-smc.sh
 
 python3 scripts/test-helper-artifacts.py
+python3 scripts/test-code-signing.py

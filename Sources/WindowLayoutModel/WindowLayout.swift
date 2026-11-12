@@ -73,8 +73,11 @@ public struct WindowLayoutSnapshot: Codable, Equatable, Sendable {
     public var date: Date
     public var displays: [LayoutDisplay]
     public var windows: [LayoutWindow]
-    public init(date: Date = Date(), displays: [LayoutDisplay], windows: [LayoutWindow]) {
+    public var savedWithOmissions: Bool?
+    public var savedDuringPendingRestore: Bool?
+    public init(date: Date = Date(), displays: [LayoutDisplay], windows: [LayoutWindow], savedWithOmissions: Bool? = nil) {
         self.date = date; self.displays = displays; self.windows = windows
+        self.savedWithOmissions = savedWithOmissions
     }
     public var isValid: Bool {
         !displays.isEmpty && displays.count <= 16 && !windows.isEmpty && windows.count <= 200

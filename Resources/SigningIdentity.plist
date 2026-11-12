@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>BundleIdentifier</key>
+	<string>local.lookout.app</string>
+	<key>CertificateSHA1</key>
+	<string>1BF0E214E20D254E27A8831DEAD3E85A62D32288</string>
+</dict>
+</plist>

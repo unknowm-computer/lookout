@@ -19,7 +19,7 @@ import Testing
     var onRestore: (() -> Void)?
     init(_ value: WindowLayoutSnapshot) { screens = value.displays; candidate = value }
     func displays() -> [LayoutDisplay] { reads += 1; return screens }
-    func capture() -> WindowLayoutSnapshot? { captures += 1; return candidate }
+    func capture(timeBudget: TimeInterval) -> WindowLayoutSnapshot? { captures += 1; return candidate }
     func restore(_ windows: [LayoutWindow], displays: [LayoutDisplay], identityScope: [LayoutWindow]) -> WindowRestoreResult {
         restores.append(windows)
         identityScopes.append(identityScope)
@@ -87,15 +87,19 @@ private func layoutFixture() -> WindowLayoutSnapshot {
     try await Task.sleep(for: .milliseconds(15))
     #expect(backend.reads == reads) // No recurring idle timer.
 }
-@Test @MainActor func windowLayoutFreezesSnapshotWhenDisplayDisconnectPrecedesSleep() async throws {
+@Test(arguments: [false, true])
+@MainActor func windowLayoutFreezesSnapshotWhenDisplayDisconnectPrecedesSleep(otherDisplayRemains: Bool) async throws {
     let (name, defaults) = layoutDefaults(); defer { defaults.removePersistentDomain(forName: name) }
     let saved = layoutFixture(), backend = LayoutBackendFixture(saved)
     defaults.set(true, forKey: WindowLayoutService.enabledKey)
     defaults.set(try JSONEncoder().encode(saved), forKey: WindowLayoutService.currentKey)
+    var uptime: TimeInterval = 20
     let service = WindowLayoutService(defaults: defaults, backend: backend, observe: false,
-                                      step: .milliseconds(1), attempts: 5, now: { 20 })
+                                      step: .milliseconds(1), attempts: 5, now: { uptime })
     defer { service.stop() }
-    backend.screens = []; service.displaysChanged(); service.willSleep(); service.didWake()
+    var otherDisplay = saved.displays[0]; otherDisplay.id = "other"
+    backend.screens = otherDisplayRemains ? [otherDisplay] : []
+    service.displaysChanged(); uptime = 24; service.willSleep(); service.didWake()
     try await finish(service)
     #expect(service.current == saved && service.pending && backend.captures == 0 && backend.restores.isEmpty)
     #expect(service.status == .waiting)
@@ -117,7 +121,7 @@ private func layoutFixture() -> WindowLayoutSnapshot {
     #expect(service.current == nil && service.lastGood == backup)
     #expect(backend.restores == [backup.windows] && backend.captures == 0)
 }
-@Test @MainActor func windowLayoutRetriesOnlyFailedWindowsAndProtectsIncompleteRestoration() async throws {
+@Test @MainActor func windowLayoutRetriesOnlyFailedWindowsAndKeepsSnapshotsUntilNextSave() async throws {
     let (name, defaults) = layoutDefaults(); defer { defaults.removePersistentDomain(forName: name) }
     var saved = layoutFixture(); var second = saved.windows[0]; second.id = UUID(); second.identifier = "two"
     saved.windows.append(second)
@@ -129,7 +133,7 @@ private func layoutFixture() -> WindowLayoutSnapshot {
     service.setEnabled(true); service.restoreNow(); try await finish(service)
     #expect(backend.restores == [saved.windows, [second]])
     #expect(service.pending && service.status == .incomplete)
-    service.willSleep(); #expect(backend.captures == 0 && service.current == saved)
+    #expect(backend.captures == 0 && service.current == saved)
 }
 @Test @MainActor func windowLayoutDisableCancelsWakeAndPreservesProtectionForNextLaunch() async throws {
     let (name, defaults) = layoutDefaults(); defer { defaults.removePersistentDomain(forName: name) }
@@ -144,7 +148,7 @@ private func layoutFixture() -> WindowLayoutSnapshot {
     service.didWake(); service.setEnabled(true); try await finish(service)
     #expect(backend.restores == [saved.windows])
 }
-@Test @MainActor func windowLayoutRejectsPartialCaptureAndPermissionRevocationWithoutOverwriting() async throws {
+@Test @MainActor func windowLayoutRejectsInvalidCaptureAndPermissionRevocationWithoutOverwriting() async throws {
     let (name, defaults) = layoutDefaults(); defer { defaults.removePersistentDomain(forName: name) }
     let saved = layoutFixture(), backend = LayoutBackendFixture(saved)
     var uptime: TimeInterval = 0
@@ -153,7 +157,9 @@ private func layoutFixture() -> WindowLayoutSnapshot {
                                       step: .milliseconds(2), now: { uptime })
     defer { service.stop() }
     service.setEnabled(true); uptime = 10
-    backend.candidate = WindowLayoutSnapshot(displays: saved.displays, windows: [])
+    var invalid = saved
+    invalid.windows.removeAll()
+    backend.candidate = invalid
     service.willSleep()
     #expect(service.current == saved && service.lastGood == nil && service.status == .captureFailed)
     service.didWake(); backend.permission = false; try await finish(service)
@@ -166,15 +172,44 @@ private func layoutFixture() -> WindowLayoutSnapshot {
     defaults.set(try JSONEncoder().encode(saved), forKey: WindowLayoutService.currentKey)
     let service = WindowLayoutService(defaults: defaults, backend: backend, observe: false, now: { uptime })
     defer { service.stop() }
-    service.setEnabled(true); uptime = 3; backend.screens = []; service.displaysChanged(); uptime = 6
+    service.setEnabled(true); uptime = 3; backend.screens = []; service.displaysChanged()
     backend.candidate = nil; service.useCurrentLayout()
-    #expect(service.pending && service.current == saved && service.lastGood == nil)
+    #expect(service.pending && service.status == .captureFailed && service.current == saved && service.lastGood == nil)
     var new = saved; new.displays[0].id = "new"; new.windows[0].displayID = "new"
     backend.screens = new.displays; backend.candidate = new
     service.useCurrentLayout()
     #expect(!service.pending && service.current == new && service.lastGood == saved)
     service.restoreNow(previous: true); service.stop()
     #expect(service.current == new && service.lastGood == saved)
+}
+
+@Test @MainActor func manualWindowSaveReplacesPendingRestoreAndPersistsTheNewDate() async throws {
+    let (name, defaults) = layoutDefaults(); defer { defaults.removePersistentDomain(forName: name) }
+    let saved = layoutFixture()
+    var fresh = saved
+    fresh.date = saved.date.addingTimeInterval(600)
+    fresh.windows[0].frame.x += 100
+    fresh.savedWithOmissions = true
+    let backend = LayoutBackendFixture(fresh)
+    // The Dock work area can change while the user is confirming the save.
+    backend.screens[0].visibleFrame.height -= 30
+    defaults.set(true, forKey: WindowLayoutService.enabledKey)
+    defaults.set(try JSONEncoder().encode(saved), forKey: WindowLayoutService.currentKey)
+    defaults.set(true, forKey: WindowLayoutService.pendingKey)
+    defaults.set(true, forKey: WindowLayoutService.restoreKey)
+    let service = WindowLayoutService(defaults: defaults, backend: backend, observe: false, step: .milliseconds(1))
+    defer { service.stop() }
+
+    #expect(service.busy && service.pending)
+    service.useCurrentLayout()
+    let report = service.report()
+    #expect(report.phase == .saved && report.savedAt == fresh.date && report.backupAt == saved.date)
+    #expect(report.savedWithOmissions == true && report.restoreReport == nil)
+    #expect(!report.busy && !report.pending && !defaults.bool(forKey: WindowLayoutService.restoreKey))
+    #expect(WindowLayoutSnapshot.decode(defaults.data(forKey: WindowLayoutService.currentKey)) == fresh)
+    #expect(WindowLayoutSnapshot.decode(defaults.data(forKey: WindowLayoutService.backupKey)) == saved)
+    try await Task.sleep(for: .milliseconds(15))
+    #expect(backend.restores.isEmpty && backend.captures == 1)
 }
 
 @Test @MainActor func windowLayoutDoesNotWriteUntilAllDisplaysRemainStable() async throws {
@@ -339,35 +374,60 @@ private func layoutFixture() -> WindowLayoutSnapshot {
     defer { service.stop() }
     service.setEnabled(true); uptime = 10
     backend.screens[0].visibleFrame.height -= 30
-    var fresh = saved; fresh.displays = backend.screens; fresh.windows[0].frame.x = 100
+    var fresh = saved; fresh.windows[0].frame.x = 100
     backend.candidate = fresh
     service.displaysChanged()
     #expect(!service.pending && backend.restores.isEmpty)
     service.willSleep()
     #expect(service.current == fresh && service.lastGood == saved && backend.captures == 1)
 }
-@Test @MainActor func successfulRetryClearsPersistentSaveProtectionAndResumesSafeSnapshotRotation() async throws {
+@Test @MainActor func repeatedRestoreFailuresAllowSleepSavesWithoutReplacingTheGoodBackup() async throws {
     let (name, defaults) = layoutDefaults(); defer { defaults.removePersistentDomain(forName: name) }
     let saved = layoutFixture(), backend = LayoutBackendFixture(saved)
     var previous = saved; previous.windows[0].frame.x = 50
     defaults.set(try JSONEncoder().encode(saved), forKey: WindowLayoutService.currentKey)
     defaults.set(try JSONEncoder().encode(previous), forKey: WindowLayoutService.backupKey)
     var failure = WindowRestoreResult(); failure.fail(saved.windows[0], reason: .ambiguousIdentity)
-    backend.results = [failure, failure, WindowRestoreResult(restored: 1)]
+    backend.results = [failure, failure]
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let artifacts = WindowLayoutArtifacts(directory: directory)
     var uptime: TimeInterval = 0
-    let service = WindowLayoutService(defaults: defaults, backend: backend, observe: false, step: .milliseconds(1), now: { uptime })
+    let service = WindowLayoutService(defaults: defaults, backend: backend, observe: false, step: .milliseconds(1),
+                                      artifacts: artifacts, now: { uptime })
     defer { service.stop() }
     service.setEnabled(true); uptime = 10; service.restoreNow(); try await finish(service)
     #expect(service.pending && service.current == saved && service.lastGood == previous)
     #expect(service.report().restoreReport?.failed == 1)
     #expect(service.report().restoreReport?.issues.first?.reason == .ambiguousIdentity)
-    service.willSleep(); #expect(backend.captures == 0)
+    var fresh = saved; fresh.date += 60; fresh.windows[0].frame.x = 200; backend.candidate = fresh
+    service.willSleep()
+    #expect(service.current?.date == fresh.date && service.current?.windows == fresh.windows)
+    #expect(service.current?.savedDuringPendingRestore == true && service.lastGood == saved)
+    #expect(WindowLayoutSnapshot.decode(defaults.data(forKey: WindowLayoutService.currentKey)) == service.current)
+
+    var nextFailure = WindowRestoreResult(); nextFailure.fail(fresh.windows[0], reason: .ambiguousIdentity)
+    backend.results = [nextFailure, nextFailure]
+    service.didWake(); try await finish(service)
+    #expect(service.pending && backend.restores.last == fresh.windows)
+    var partial = fresh; partial.date += 60; partial.windows[0].frame.x = 300
+    partial.savedWithOmissions = true; backend.candidate = partial
+    uptime = 20; service.willSleep()
+    #expect(service.current?.windows == partial.windows && service.report().savedWithOmissions == true)
+    #expect(service.lastGood == saved && backend.captures == 2)
+    #expect(WindowLayoutSnapshot.decode(defaults.data(forKey: WindowLayoutService.backupKey)) == saved)
+
     service.didWake(); try await finish(service)
     #expect(!service.pending && !defaults.bool(forKey: WindowLayoutService.pendingKey))
     #expect(!defaults.bool(forKey: WindowLayoutService.restoreKey) && service.restoreReport?.failed == 0)
-    var fresh = saved; fresh.windows[0].frame.x = 200; backend.candidate = fresh
-    uptime = 20; service.willSleep()
-    #expect(service.current == fresh && service.lastGood == saved && backend.captures == 1)
+    #expect(backend.restores.last == partial.windows && service.report().savedWithOmissions == true)
+    let diagnostics = try #require(service.diagnostics())
+    let log = try #require(JSONSerialization.jsonObject(with: diagnostics) as? [String: Any])
+    let events = try #require(log["events"] as? [[String: Any]])
+    #expect(events.compactMap { $0["action"] as? String } == [
+        "manualRestore", "automaticSave", "automaticRestore", "automaticSave", "automaticRestore"
+    ])
+    #expect(events.compactMap { $0["result"] as? String } == ["incomplete", "saved", "incomplete", "savedWithOmissions", "restored"])
 }
 @Test @MainActor func retryKeepsFullIdentityScopeAndReportsOnlyFailuresRemainingAfterRetry() async throws {
     let (name, defaults) = layoutDefaults(); defer { defaults.removePersistentDomain(forName: name) }

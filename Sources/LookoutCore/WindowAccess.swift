@@ -18,7 +18,7 @@ extension WindowLayoutPhase {
         case .disabled: L10n.text("자동 저장·복원이 꺼져 있습니다.")
         case .permission: L10n.text("창을 저장·복원하려면 손쉬운 사용 권한이 필요합니다.")
         case .ready: L10n.text("첫 정상 배치를 저장할 준비 중입니다.")
-        case .saved: L10n.text("정상 배치를 보관 중입니다. 잠자기 전에 다시 저장합니다.")
+        case .saved: L10n.text("창 배치를 저장했습니다.")
         case .waiting: L10n.text("저장된 모니터 구성이 안정될 때까지 기다립니다. 기존 배치는 보관합니다.")
         case .restoring: L10n.text("창 배치를 복원하는 중…")
         case .restored(let count, let skipped): L10n.text("\(count)개 창 복원 · \(skipped)개 건너뜀")

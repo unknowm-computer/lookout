@@ -7,7 +7,7 @@ import WindowLayoutModel
     var isTrusted: Bool { get }
     func checkPermission() -> WindowAccessReport
     func displays() -> [LayoutDisplay]
-    func capture() -> WindowLayoutSnapshot?
+    func capture(timeBudget: TimeInterval) -> WindowLayoutSnapshot?
     func restore(_ windows: [LayoutWindow], displays: [LayoutDisplay], identityScope: [LayoutWindow]) -> WindowRestoreResult
 }
 
@@ -58,22 +58,34 @@ struct WindowRestoreResult {
         return result.count == screens.count ? result : []
     }
 
-    func capture() -> WindowLayoutSnapshot? {
+    func capture(timeBudget: TimeInterval) -> WindowLayoutSnapshot? {
         guard isTrusted else { return nil }
-        let screens = displays(), deadline = ProcessInfo.processInfo.systemUptime + 2
+        let screens = displays()
+        let deadline = ProcessInfo.processInfo.systemUptime + timeBudget
         guard !screens.isEmpty else { return nil }
         var records: [LayoutWindow] = [], elements: [UUID: AXUIElement] = [:]
-        for app in NSWorkspace.shared.runningApplications where app.activationPolicy == .regular && app.processIdentifier != getpid() && app.bundleIdentifier != "local.lookout.app" {
-            guard ProcessInfo.processInfo.systemUptime < deadline else { return nil }
+        var isPartial = false
+        apps: for app in NSWorkspace.shared.runningApplications where app.activationPolicy == .regular && app.processIdentifier != getpid() && app.bundleIdentifier != "local.lookout.app" {
+            guard ProcessInfo.processInfo.systemUptime < deadline else {
+                isPartial = true
+                break
+            }
             guard let bundle = app.bundleIdentifier, let launch = WindowProcessIdentity.launchDate(for: app) else { continue }
             let application = AXUIElementCreateApplication(app.processIdentifier)
             AXUIElementSetMessagingTimeout(application, 0.12)
             var raw: CFTypeRef?
             let error = AXUIElementCopyAttributeValue(application, kAXWindowsAttribute as CFString, &raw)
-            if error == .cannotComplete { return nil } // Do not replace a good snapshot with a partial capture.
+            if error == .apiDisabled { return nil }
+            if error == .cannotComplete {
+                isPartial = true
+                continue
+            }
             guard error == .success, let windows = raw as? [AXUIElement] else { continue }
             for window in windows {
-                guard ProcessInfo.processInfo.systemUptime < deadline, records.count < 200 else { return nil }
+                guard ProcessInfo.processInfo.systemUptime < deadline, records.count < 200 else {
+                    isPartial = true
+                    break apps
+                }
                 AXUIElementSetMessagingTimeout(window, 0.12)
                 guard eligible(window), let frame = frame(window),
                       let screen = screens.max(by: { $0.frame.intersectionArea(with: frame) < $1.frame.intersectionArea(with: frame) }),
@@ -86,8 +98,8 @@ struct WindowRestoreResult {
                 records.append(record); elements[record.id] = window
             }
         }
-        guard displays() == screens else { return nil }
-        let snapshot = WindowLayoutSnapshot(displays: screens, windows: records)
+        guard LayoutDisplay.sameTopology(screens, displays()) else { return nil }
+        let snapshot = WindowLayoutSnapshot(displays: screens, windows: records, savedWithOmissions: isPartial ? true : nil)
         guard snapshot.isValid else { return nil }
         // Retain the previous snapshot's handles as well, for safe same-session backup restoration.
         references.merge(elements) { _, new in new }

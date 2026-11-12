@@ -16,6 +16,7 @@ from urllib.parse import quote
 import xml.etree.ElementTree as ET
 
 from update_config import ROOT, load_configuration
+from code_signing import load_identity, verify_bundle
 
 SPARKLE = 'http://www.andymatuschak.org/xml-namespaces/sparkle'
 ET.register_namespace('sparkle', SPARKLE)
@@ -97,6 +98,7 @@ def prepare_release():
         raise ValueError('The Keychain public key does not match the public key shipped in Lookout. Use the original signing key; do not replace it for an existing release.')
     run('bash', 'scripts/create-dmg.sh')
     app = ROOT / 'build/Lookout.app'
+    verify_bundle(app, load_identity())
     with (app / 'Contents/Info.plist').open('rb') as source:
         info = plistlib.load(source)
     version, build, _ = validate_bundle(info, config)
@@ -109,6 +111,10 @@ def prepare_release():
         folder = Path(staging)
         archive = folder / f'Lookout-{version}.zip'
         run('/usr/bin/ditto', '-c', '-k', '--sequesterRsrc', '--keepParent', str(app), str(archive))
+        # Verify the actual archive payload, not only the bundle before compression.
+        with tempfile.TemporaryDirectory(prefix='verify-archive.', dir=ROOT / '.build') as extracted:
+            run('/usr/bin/ditto', '-x', '-k', str(archive), extracted)
+            verify_bundle(Path(extracted) / 'Lookout.app', load_identity())
         signature = run(str(tools / 'sign_update'), '--account', account, '-p', str(archive), capture=True)
         run(str(tools / 'sign_update'), '--account', account, '--verify', str(archive), signature)
         make_appcast(info, config, archive, signature).write(folder / 'appcast.xml', encoding='utf-8', xml_declaration=True)

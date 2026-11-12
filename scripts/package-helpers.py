@@ -14,6 +14,8 @@ import stat
 import subprocess
 import tempfile
 
+import code_signing
+
 KINDS = {
     'fan': ('LookoutFanHelper', 'Contents/Library/Helpers/LookoutFanHelper',
             ['Resources/local.lookout.fan-helper.plist']),
@@ -64,21 +66,22 @@ def dependency_inputs(root, package, product):
     return {'targets': closure, 'files': files,
             'package': {key: value for key, value in package.items() if key not in ('targets', 'products', 'dependencies', 'packageKind')}}
 
-def fingerprint(root, package, kind, toolchain):
+def fingerprint(root, package, kind, toolchain, identity):
     product, _, resources = KINDS[kind]
     inputs = dependency_inputs(root, package, product)
     inputs.update(toolchain=toolchain, recipe=digest(Path(__file__)), buildScript=digest(root / 'scripts/build.sh'),
                   resources={file: digest(root / file) for file in resources},
-                  build='release;arm64+x86_64;strip=-x,-S;sign=adhoc;v1')
+                  signingRecipe=digest(Path(code_signing.__file__)), certificateSHA1=identity,
+                  build='release;arm64+x86_64;strip=-x,-S;sign=fixed;v2')
     return hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest()
 
-def verify(path, kind):
-    run('codesign', '--verify', '--deep', '--strict', str(path))
+def verify(path, kind, identity):
+    code_signing.verify(path, kind, identity)
     binary = path / 'Contents/MacOS/LookoutWindowHelper' if kind == 'window' else path
     for architecture in ('arm64', 'x86_64'):
         run('xcrun', 'lipo', str(binary), '-verify_arch', architecture)
 
-def prepare(root, bin_dir, stage, kind):
+def prepare(root, bin_dir, stage, kind, identity):
     product, _, _ = KINDS[kind]
     output = stage / product
     if kind == 'window':
@@ -92,16 +95,13 @@ def prepare(root, bin_dir, stage, kind):
         binary = output
     shutil.copy2(bin_dir / product, binary)
     run('xcrun', 'strip', '-x', '-S', str(binary))
-    signing = ['codesign', '--force', '--sign', '-']
-    if kind == 'fan':
-        signing += ['--identifier', 'local.lookout.fan-helper']
-    run(*signing, str(output))
-    verify(output, kind)
+    code_signing.sign(output, kind, identity)
+    verify(output, kind, identity)
     return output
 
-def package_helpers(root, bin_dir, app, package, cache, toolchain):
+def package_helpers(root, bin_dir, app, package, cache, toolchain, identity):
     for kind, (product, relative, resources) in KINDS.items():
-        key = fingerprint(root, package, kind, toolchain)
+        key = fingerprint(root, package, kind, toolchain, identity)
         entry = cache / kind / key
         artifact_name = product + ('.app' if kind == 'window' else '')
         artifact = entry / artifact_name
@@ -109,13 +109,13 @@ def package_helpers(root, bin_dir, app, package, cache, toolchain):
             manifest = json.loads((entry / 'manifest.json').read_text())
             if manifest != {'fingerprint': key, 'files': tree(artifact)}:
                 raise ValueError(f'Helper cache validation failed: {entry}')
-            verify(artifact, kind)
+            verify(artifact, kind, identity)
             print(f'Reusing signed {product}: {key[:12]}', flush=True)
         else:
             entry.parent.mkdir(parents=True, exist_ok=True)
             with tempfile.TemporaryDirectory(prefix='.staging-', dir=entry.parent) as temporary:
                 staging = Path(temporary)
-                built = prepare(root, bin_dir, staging, kind)
+                built = prepare(root, bin_dir, staging, kind, identity)
                 (staging / 'manifest.json').write_text(json.dumps({'fingerprint': key, 'files': tree(built)}, sort_keys=True))
                 staging.rename(entry)
             print(f'Cached signed {product}: {key[:12]}', flush=True)
@@ -128,7 +128,7 @@ def package_helpers(root, bin_dir, app, package, cache, toolchain):
                 shutil.copytree(artifact, staged)
             else:
                 shutil.copy2(artifact, staged)
-            verify(staged, kind)
+            verify(staged, kind, identity)
             if destination.is_dir():
                 shutil.rmtree(destination)
             elif destination.exists():
@@ -148,7 +148,8 @@ def main():
     args = parser.parse_args()
     toolchain = [run('xcrun', 'swift', '--version'), run('xcodebuild', '-version'),
                  run('xcrun', '--sdk', 'macosx', '--show-sdk-build-version')]
-    package_helpers(Path.cwd(), args.bin_dir, args.app, json.loads(args.package.read_text()), args.cache, toolchain)
+    identity = code_signing.prepare()
+    package_helpers(Path.cwd(), args.bin_dir, args.app, json.loads(args.package.read_text()), args.cache, toolchain, identity)
 
 if __name__ == '__main__':
     main()

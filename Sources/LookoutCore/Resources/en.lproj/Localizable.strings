@@ -399,7 +399,7 @@
 
 "첫 정상 배치를 저장할 준비 중입니다." = "Preparing to save the first stable layout.";
 
-"정상 배치를 보관 중입니다. 잠자기 전에 다시 저장합니다." = "A stable layout is saved. It will be saved again before sleep.";
+"창 배치를 저장했습니다." = "The window layout is saved.";
 
 "저장된 모니터 구성이 안정될 때까지 기다립니다. 기존 배치는 보관합니다." = "Waiting for the saved display setup to stabilize. The existing layout is preserved.";
 
@@ -410,6 +410,7 @@
 "일부 창을 복원하지 못했습니다. 기존 배치를 보관합니다." = "Some windows could not be restored. The existing layout is preserved.";
 
 "정상 배치를 저장하지 못했습니다. 기존 배치는 유지합니다." = "Could not save a stable layout. The existing layout is preserved.";
+"일부 창을 조회하지 못했습니다. 확인한 창으로 현재 배치를 저장했습니다." = "The current layout was saved with the windows that could be read. Some windows were omitted.";
 
 "손쉬운 사용 설정 열기" = "Open Accessibility Settings";
 
@@ -420,7 +421,6 @@
 "저장된 배치 복원" = "Restore Saved Layout";
 "현재 배치 저장" = "Save Current Layout";
 "현재 배치를 저장할까요?" = "Save the current layout?";
-"기존 저장본은 이전 배치로 보관합니다." = "The existing snapshot will be kept as the previous layout.";
 
 "지금 복원" = "Restore now";
 
@@ -432,7 +432,7 @@
 
 "현재 배치로 다시 시작할까요?" = "Use the current layout?";
 
-"모니터 구성을 변경했거나 창을 새로 정리한 경우 현재 배치를 저장할 수 있습니다. 기존 저장본은 이전 배치로 보관합니다." = "If you changed your display setup or rearranged windows, you can save the current layout. The existing snapshot will be kept as the previous layout.";
+"모니터 구성을 변경했거나 창을 새로 정리한 경우 현재 배치를 저장할 수 있습니다. 이전 정상 배치도 별도 백업으로 보관합니다." = "If you changed your display setup or rearranged windows, you can save the current layout. The previous stable layout is kept as a backup.";
 
 "저장" = "Save";
 
@@ -494,6 +494,14 @@
 "앱이 창의 위치·크기 변경을 허용하지 않았습니다." = "The app rejected a change to the window position or size.";
 "변경 요청 후 창의 위치·크기가 저장된 배치와 일치하지 않습니다." = "After the change request, the window position or size does not match the saved layout.";
 "복원 도중 모니터 작업 영역이 바뀌었습니다. 안정된 후 다시 복원해주세요." = "The display work area changed during restoration. Restore again after it stabilizes.";
-"복원이 완료되지 않아 새 배치 저장을 보류합니다. 기존 정상 배치는 유지됩니다." = "Saving a new layout is paused until restoration completes. The existing good layout is preserved.";
 "복원 실패 내역" = "Restore failures";
 "실패 내역은 최대 20개까지 표시합니다." = "Up to 20 failed windows are shown.";
+"진단 로그 저장" = "Save Diagnostics Log";
+"진단 로그를 저장하지 못했습니다." = "Could not save the diagnostics log.";
+"미리보기" = "Preview";
+"이전 배치" = "Previous layout";
+"저장 배치 화면 미리보기" = "Saved layout screenshot previews";
+"저장된 화면 미리보기가 없습니다." = "No screenshot preview was saved.";
+"배치를 저장할 때 모니터별 화면을 작게 캡처해 이 Mac에 보관합니다. 옵션을 끄면 미리보기를 지웁니다." = "Saving a layout takes a small screenshot of each display and keeps it on this Mac. Turning this off deletes the previews.";
+"Lookout 창 배치 도우미의 화면 기록 권한이 필요합니다." = "The Lookout Window Helper needs Screen Recording permission.";
+"화면 기록 권한 설정" = "Screen Recording Settings";

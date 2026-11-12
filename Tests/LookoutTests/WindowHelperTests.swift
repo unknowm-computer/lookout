@@ -129,6 +129,32 @@ import Testing
     #expect(WindowAccessReport(trustedAPI: true, query: .unavailable).canAccess)
     #expect(!WindowAccessReport(trustedAPI: false, query: .unavailable).canAccess)
 }
+@Test @MainActor func confirmedWindowSaveRunsAfterAnInFlightRefresh() async throws {
+    let (name, defaults) = try windowDefaults(); defer { defaults.removePersistentDomain(forName: name) }
+    defaults.set(true, forKey: WindowLayoutClient.enabledKey)
+    defaults.set("same", forKey: HelperServiceKind.window.revisionKey)
+    let oldDate = Date(timeIntervalSince1970: 1_000), newDate = Date(timeIntervalSince1970: 2_000)
+    var actions: [String] = []
+    let client = WindowLayoutClient(defaults: defaults, revision: "same",
+        registrationService: FakeFanHelperRegistration(status: .enabled),
+        requestOverride: { action, _, _ in
+            actions.append(action ?? "configure")
+            let saving = action == "baseline"
+            return try JSONEncoder().encode(WindowHelperState(enabled: true, busy: !saving, phase: saving ? .saved : .waiting,
+                permission: WindowAccessReport(trustedAPI: true, query: .allowed), savedAt: saving ? newDate : oldDate,
+                backupAt: saving ? oldDate : nil, pending: !saving, processID: 123))
+        })
+    defer { client.stop() }
+    for _ in 0..<100 where client.connecting { try await Task.sleep(for: .milliseconds(2)) }
+    #expect(client.busy && client.canSave && !client.canRestore)
+    client.refresh()
+    #expect(client.connecting)
+    client.useCurrentLayout()
+    for _ in 0..<100 where client.connecting { try await Task.sleep(for: .milliseconds(2)) }
+    #expect(actions == ["configure", "refresh", "baseline"])
+    #expect(client.savedAt == newDate && client.backupAt == oldDate && !client.busy)
+}
+
 @Test func windowHelperRejectsMalformedOversizedOrWrongProtocolReplies() throws {
     let value = WindowHelperState(enabled: true, busy: false, phase: .permission,
         permission: WindowAccessReport(trustedAPI: false, query: .denied), savedAt: nil, backupAt: nil,

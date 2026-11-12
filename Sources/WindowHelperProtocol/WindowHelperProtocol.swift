@@ -29,11 +29,18 @@ public struct WindowHelperState: Codable, Sendable {
     public var pending: Bool
     public var processID: Int32
     public var restoreReport: WindowRestoreReport?
+    public var savedWithOmissions: Bool?
+    public var previewEnabled: Bool?
+    public var screenRecordingAllowed: Bool?
+    public var previewAt: Date?
+    public var backupPreviewAt: Date?
     public init(enabled: Bool, busy: Bool, phase: WindowLayoutPhase, permission: WindowAccessReport,
-                savedAt: Date?, backupAt: Date?, pending: Bool, processID: Int32, restoreReport: WindowRestoreReport? = nil) {
+                savedAt: Date?, backupAt: Date?, pending: Bool, processID: Int32, restoreReport: WindowRestoreReport? = nil,
+                savedWithOmissions: Bool? = nil) {
         self.enabled = enabled; self.busy = busy; self.phase = phase; self.permission = permission
         self.savedAt = savedAt; self.backupAt = backupAt; self.pending = pending; self.processID = processID
         self.restoreReport = restoreReport
+        self.savedWithOmissions = savedWithOmissions
     }
     public static func decode(_ data: Data?) -> Self? {
         guard let data, data.count < 65_536, let value = try? JSONDecoder().decode(Self.self, from: data),

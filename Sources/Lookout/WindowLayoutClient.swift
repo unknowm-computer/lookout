@@ -3,6 +3,7 @@ import Combine
 import FanControlProtocol
 import LookoutCore
 import ServiceManagement
+import UniformTypeIdentifiers
 import WindowHelperProtocol
 
 /// The UI owns preferences; the user-session helper owns AX objects and sleep/wake handling.
@@ -12,6 +13,7 @@ import WindowHelperProtocol
     @Published private(set) var state: WindowHelperState?
     @Published private(set) var connecting = false
     @Published private(set) var connectionError: String?
+    @Published private(set) var exportingDiagnostics = false
     private let defaults: UserDefaults
     let maintenance: FanHelperMaintenance
     private var subscriptions: Set<AnyCancellable> = []
@@ -19,6 +21,7 @@ import WindowHelperProtocol
     private var events: WindowClientEvents?
     private var generation = 0
     private var requestsPermissionAfterSetup = false
+    private var saveAfterRequest = false
     private let requestOverride: (@MainActor (String?, Bool, Data?) async throws -> Data?)?
     private let connectionFactory: (@MainActor () throws -> (NSXPCConnection, String))?
     init(defaults: UserDefaults = .standard, revision: String? = nil,
@@ -45,9 +48,18 @@ import WindowHelperProtocol
     var busy: Bool { connecting || maintenance.updating || state?.busy == true }
     var savedAt: Date? { state?.savedAt }
     var backupAt: Date? { state?.backupAt }
+    var savedPreviewAt: Date? {
+        guard enabled, state?.previewEnabled == true,
+              let savedAt, state?.previewAt == savedAt else { return nil }
+        return savedAt
+    }
     var canRestore: Bool { enabled && trusted && savedAt != nil && !busy }
-    var canSave: Bool { enabled && trusted && !busy }
+    var canSave: Bool { enabled && trusted && !connecting && !maintenance.updating }
     var statusMessage: String { state?.phase.message ?? L10n.text("창 배치 도우미 연결을 확인해주세요.") }
+    var saveNotice: String? {
+        guard state?.savedWithOmissions == true else { return nil }
+        return L10n.text("일부 창을 조회하지 못했습니다. 확인한 창으로 현재 배치를 저장했습니다.")
+    }
     func setEnabled(_ value: Bool) {
         guard enabled != value else { return }
         enabled = value; defaults.set(value, forKey: Self.enabledKey)
@@ -80,14 +92,61 @@ import WindowHelperProtocol
         maintenance.activate(force: repairConnection)
     }
     func openSystemSettings() { SMAppService.openSystemSettingsLoginItems() }
+    func setPreviewEnabled(_ value: Bool) { send(action: value ? "previewOn" : "previewOff") }
+    func requestPreviewPermission() { send(action: "previewPermission") }
+    func loadPreview(previous: Bool, date: Date) async -> WindowLayoutPreview? {
+        guard enabled, connected, state?.previewEnabled == true else { return nil }
+        let token = generation
+        let data = try? await request(action: previous ? "previousPreview" : "preview", token: token)
+        guard generation == token, state?.previewEnabled == true,
+              let preview = WindowLayoutPreview.decode(data), preview.date == date else { return nil }
+        return preview
+    }
+    func exportDiagnostics() {
+        guard enabled, connected, !exportingDiagnostics else { return }
+        exportingDiagnostics = true
+        let token = generation
+        Task {
+            defer { exportingDiagnostics = false }
+            let data = try? await request(action: "diagnostics", token: token)
+            guard generation == token else { return }
+            guard let data, data.count <= WindowHelperEndpoint.maximumTransferBytes,
+                  (try? JSONSerialization.jsonObject(with: data)) is [String: Any] else {
+                showDiagnosticsError()
+                return
+            }
+            let panel = NSSavePanel()
+            panel.title = L10n.text("진단 로그 저장")
+            panel.allowedContentTypes = [.json]
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withFullDate]
+            panel.nameFieldStringValue = "Lookout-WindowLayout-\(formatter.string(from: Date())).json"
+            NSApp.activate()
+            guard await panel.begin() == .OK, let url = panel.url else { return }
+            do { try data.write(to: url, options: .atomic) }
+            catch { showDiagnosticsError() }
+        }
+    }
+    private func showDiagnosticsError() {
+        NSApp.activate()
+        let alert = NSAlert()
+        alert.messageText = L10n.text("진단 로그를 저장하지 못했습니다.")
+        alert.alertStyle = .warning
+        alert.runModal()
+    }
     func restoreNow(previous: Bool = false) { guard canRestore else { return }; send(action: previous ? "previous" : "restore") }
-    func useCurrentLayout() { guard canSave else { return }; send(action: "baseline") }
+    func useCurrentLayout() {
+        guard enabled, trusted, !maintenance.updating else { return }
+        if connecting { saveAfterRequest = true }
+        else { send(action: "baseline") }
+    }
     func stop() {
         requestsPermissionAfterSetup = false
         disconnect()
     }
     private func disconnect() {
         generation += 1
+        saveAfterRequest = false
         connection?.invalidationHandler = nil; connection?.interruptionHandler = nil
         connection?.invalidate(); connection = nil; events = nil; state = nil; connecting = false
     }
@@ -96,7 +155,15 @@ import WindowHelperProtocol
         connecting = true; connectionError = nil
         let token = generation
         Task {
-            defer { if generation == token { connecting = false } }
+            defer {
+                if generation == token {
+                    connecting = false
+                    if saveAfterRequest {
+                        saveAfterRequest = false
+                        useCurrentLayout()
+                    }
+                }
+            }
             guard generation == token else { return }
             do {
                 let data = try await request(action: action, token: token)

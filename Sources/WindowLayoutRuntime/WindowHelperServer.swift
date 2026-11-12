@@ -6,7 +6,7 @@ import WindowHelperProtocol
 
 /// A user-session LaunchAgent. Window access never runs in the privileged fan daemon.
 @MainActor public final class WindowHelperServer {
-    private let engine = WindowLayoutService(startEnabled: false)
+    private let engine = WindowLayoutService(startEnabled: false, artifacts: WindowLayoutArtifacts())
     private var subscription: AnyCancellable?
     private var listener: NSXPCListener?
     private var delegate: WindowListenerDelegate?
@@ -40,6 +40,12 @@ import WindowHelperProtocol
         case "restore": engine.restoreNow()
         case "previous": engine.restoreNow(previous: true)
         case "baseline": engine.useCurrentLayout()
+        case "previewOn": engine.setPreviewEnabled(true)
+        case "previewOff": engine.setPreviewEnabled(false)
+        case "previewPermission": engine.requestPreviewPermission()
+        case "preview": return engine.preview(previous: false)
+        case "previousPreview": return engine.preview(previous: true)
+        case "diagnostics": return engine.diagnostics()
         case "permission":
             // This only requests the OS prompt. It cannot grant or reset TCC approval.
             engine.refresh()
