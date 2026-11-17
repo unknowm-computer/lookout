@@ -17,8 +17,7 @@ import WindowHelperProtocol
     @Published private var previewEnabled: Bool
     @Published private var screenRecordingAllowed = false
     @Published private var previewRevision = 0
-    private(set) var pending: Bool
-    private var restoreRequested: Bool
+    private(set) var pending = false
     var snapshot: WindowLayoutSnapshot? { current ?? lastGood }
     var canRestore: Bool { enabled && trusted && snapshot != nil && !busy }
     private let defaults: UserDefaults
@@ -40,6 +39,7 @@ import WindowHelperProtocol
     static let backupKey = "windowLayout.lastGood.v1"
     static let pendingKey = "windowLayout.pending.v1"
     static let restoreKey = "windowLayout.restoreRequested.v1"
+    static let backupProtectionKey = "windowLayout.protectBackup.v1"
     static let bootSessionKey = "windowLayout.bootSession.v1"
     static let previewKey = "windowLayout.preview.v1"
 
@@ -56,7 +56,7 @@ import WindowHelperProtocol
         // Old/unscoped snapshots must never be adopted as belonging to this boot.
         // Checking at startup also covers shutdowns where no final notification was delivered.
         if bootSessionID == nil || defaults.string(forKey: Self.bootSessionKey) != bootSessionID {
-            for key in [Self.currentKey, Self.backupKey, Self.pendingKey, Self.restoreKey] {
+            for key in [Self.currentKey, Self.backupKey, Self.backupProtectionKey, Self.pendingKey, Self.restoreKey] {
                 defaults.removeObject(forKey: key)
             }
             defaults.set(bootSessionID, forKey: Self.bootSessionKey)
@@ -64,11 +64,13 @@ import WindowHelperProtocol
         enabled = startEnabled && defaults.bool(forKey: Self.enabledKey)
         current = WindowLayoutSnapshot.decode(defaults.data(forKey: Self.currentKey))
         lastGood = WindowLayoutSnapshot.decode(defaults.data(forKey: Self.backupKey))
-        pending = defaults.bool(forKey: Self.pendingKey)
-        restoreRequested = defaults.bool(forKey: Self.restoreKey)
+        // Old versions persisted a retry request. Retain only its backup protection.
+        if snapshot == nil { protectsBackup = false }
+        else if defaults.bool(forKey: Self.pendingKey) { protectsBackup = true }
+        defaults.removeObject(forKey: Self.pendingKey)
+        defaults.removeObject(forKey: Self.restoreKey)
         observedDisplays = snapshot?.displays
         artifacts?.retainPreviews(for: previewEnabled ? previewDates : [])
-        if snapshot == nil { pending = false; restoreRequested = false }
         if observe { installObservers() }
         if enabled { refresh() }
     }
@@ -80,18 +82,14 @@ import WindowHelperProtocol
         else { previewCapture?.cancel(); status = .disabled }
     }
     func refresh() {
-        guard enabled else { return }
+        guard enabled, !sleeping, !busy else { return }
         if previewEnabled { screenRecordingAllowed = CGPreflightScreenCaptureAccess() }
         guard bootSessionID != nil else { status = .captureFailed; return }
         permission = backend.checkPermission()
         trusted = permission.canAccess
-        guard trusted else { cancel(); status = .permission; return }
-        guard !sleeping, !busy else { return }
-        if pending, snapshot != nil {
-            if restoreRequested { restoreNow(automatically: true) } else { status = .waiting }
-        }
-        else if snapshot == nil { scheduleBaseline() }
-        else { status = .saved }
+        guard trusted else { status = .permission; return }
+        if snapshot == nil { scheduleBaseline() }
+        else if status == .disabled || status == .permission { status = .saved }
     }
     func openAccessibilitySettings() {
         guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") else { return }
@@ -132,34 +130,26 @@ import WindowHelperProtocol
         trusted = permission.canAccess
         if trusted { save() }
         else { artifacts?.record(WindowLayoutLogEvent("automaticSave", "accessibilityDenied", layout: snapshot)) }
-        if snapshot != nil { setPending(true); setRestoreRequested(true) }
+        if snapshot != nil { pending = true; protectsBackup = true }
     }
     func didWake() {
+        guard sleeping else { return }
         sleeping = false
+        pending = false
         guard enabled else { return }
         changedAt = now()
-        if snapshot != nil { setPending(true); setRestoreRequested(true) }
-        refresh()
-        if !trusted, let snapshot {
-            artifacts?.record(WindowLayoutLogEvent("automaticRestore", "accessibilityDenied", layout: snapshot))
-        }
+        if snapshot != nil { restoreNow(automatically: true) }
+        else { refresh() }
     }
     func displaysChanged() {
         guard enabled else { return }
         let displays = backend.displays()
-        if let observedDisplays, LayoutDisplay.sameTopology(observedDisplays, displays) {
-            if pending && restoreRequested && !sleeping && !busy { refresh() }
-            return
-        }
+        if let observedDisplays, LayoutDisplay.sameTopology(observedDisplays, displays) { return }
         observedDisplays = displays
         changedAt = now()
-        // A disconnect can precede willSleep. Keep the restore target until the saved display set returns.
-        if snapshot != nil {
-            setPending(true); status = .waiting
-            if restoreRequested && !sleeping && !busy { refresh() }
-        } else if !sleeping {
-            scheduleBaseline()
-        }
+        // A disconnect can precede willSleep. Protect the backup independently of any restore request.
+        if snapshot != nil { protectsBackup = true }
+        else if !sleeping { refresh() }
     }
     func restoreNow(previous: Bool = false, automatically: Bool = false) {
         guard bootSessionID != nil, enabled, !sleeping, !busy, let saved = (previous ? lastGood : snapshot) else { return }
@@ -171,11 +161,17 @@ import WindowHelperProtocol
             artifacts?.record(WindowLayoutLogEvent(action, "accessibilityDenied", layout: saved))
             return
         }
-        cancel(); setPending(true); setRestoreRequested(true); busy = true; status = .waiting; restoreReport = nil
+        cancel(); pending = true; protectsBackup = true; busy = true; status = .waiting; restoreReport = nil
         let token = generation
         task = Task { [weak self] in
             guard let self else { return }
-            defer { if self.generation == token { self.busy = false; self.task = nil } }
+            defer {
+                if self.generation == token {
+                    self.pending = false
+                    self.busy = false
+                    self.task = nil
+                }
+            }
             var previousDisplays: [LayoutDisplay] = [], stable = 0
             for _ in 0..<self.attempts {
                 do { try await Task.sleep(for: self.step) } catch { return }
@@ -191,7 +187,7 @@ import WindowHelperProtocol
                 self.status = .restoring
                 self.previewCapture?.cancel()
                 var result = self.backend.restore(saved.windows, displays: displays, identityScope: saved.windows)
-                // Only retry unsuccessful writes. Never move successful windows again during a retry.
+                // Retry only the windows that failed, including identification and write failures.
                 if !result.failed.isEmpty {
                     do { try await Task.sleep(for: self.step) } catch { return }
                     guard self.enabled, self.generation == token, !Task.isCancelled else { return }
@@ -216,7 +212,6 @@ import WindowHelperProtocol
                     return
                 }
                 // Closed or newly minimized/full-screen windows are deliberately skipped.
-                // Ambiguous identities and failed writes remain eligible for a restore retry.
                 if result.failed.isEmpty && result.restored + result.skipped > 0 {
                     if previous, self.current != saved {
                         let old = self.current
@@ -224,17 +219,17 @@ import WindowHelperProtocol
                         if let data = try? JSONEncoder().encode(saved) { self.defaults.set(data, forKey: Self.currentKey) }
                         if let old, let data = try? JSONEncoder().encode(old) { self.defaults.set(data, forKey: Self.backupKey) }
                     }
-                    self.setPending(false); self.setRestoreRequested(false); self.status = .restored(result.restored, result.skipped)
+                    self.protectsBackup = false
+                    self.status = .restored(result.restored, result.skipped)
                     self.observedDisplays = displays
                     self.artifacts?.record(WindowLayoutLogEvent(action, "restored", layout: saved, displays: displays, report: result.report))
                 } else {
-                    self.setPending(true)
                     self.status = .incomplete
                     self.artifacts?.record(WindowLayoutLogEvent(action, "incomplete", layout: saved, displays: displays, report: result.report))
                 }
                 return
             }
-            self.setPending(true); self.status = .waiting
+            self.status = .displayNotReady
             self.artifacts?.record(WindowLayoutLogEvent(action, "displayNotReady", layout: saved, displays: previousDisplays))
         }
     }
@@ -266,10 +261,7 @@ import WindowHelperProtocol
             artifacts?.record(WindowLayoutLogEvent("manualSave", "accessibilityDenied", layout: snapshot))
             return
         }
-        if save(automatically: false) {
-            setPending(false)
-            setRestoreRequested(false)
-        }
+        if save(automatically: false) { protectsBackup = false }
     }
     @discardableResult private func save(automatically: Bool = true) -> Bool {
         guard enabled else { return false }
@@ -303,7 +295,7 @@ import WindowHelperProtocol
             artifacts?.record(WindowLayoutLogEvent(action, "displayChanged", layout: candidate, displays: finalDisplays))
             return false
         }
-        candidate.savedDuringPendingRestore = automatically && pending ? true : nil
+        candidate.savedDuringPendingRestore = automatically && protectsBackup ? true : nil
         guard let encoded = try? JSONEncoder().encode(candidate), encoded.count <= 1_048_576 else {
             capture?.cancel()
             status = .captureFailed
@@ -342,9 +334,17 @@ import WindowHelperProtocol
             if stored { previewRevision += 1 }
         }
     }
-    private func setRestoreRequested(_ value: Bool) { restoreRequested = value; defaults.set(value, forKey: Self.restoreKey) }
-    private func setPending(_ value: Bool) { pending = value; defaults.set(value, forKey: Self.pendingKey) }
-    private func cancel() { generation += 1; task?.cancel(); task = nil; busy = false }
+    private var protectsBackup: Bool {
+        get { defaults.bool(forKey: Self.backupProtectionKey) }
+        set { defaults.set(newValue, forKey: Self.backupProtectionKey) }
+    }
+    private func cancel() {
+        generation += 1
+        task?.cancel()
+        task = nil
+        pending = false
+        busy = false
+    }
     func stop() {
         cancel()
         previewCapture?.cancel()
@@ -361,8 +361,6 @@ import WindowHelperProtocol
         let workspace = NSWorkspace.shared.notificationCenter
         add(workspace, NSWorkspace.willSleepNotification) { $0.willSleep() }
         add(workspace, NSWorkspace.didWakeNotification) { $0.didWake() }
-        add(workspace, NSWorkspace.screensDidWakeNotification) { if $0.pending && $0.restoreRequested { $0.refresh() } }
-        add(workspace, NSWorkspace.sessionDidBecomeActiveNotification) { if $0.pending && $0.restoreRequested { $0.refresh() } }
         add(.default, NSApplication.didBecomeActiveNotification) { $0.refresh() }
         add(.default, NSApplication.didChangeScreenParametersNotification) { $0.displaysChanged() }
     }

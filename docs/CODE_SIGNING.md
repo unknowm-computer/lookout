@@ -26,7 +26,7 @@ bash scripts/setup-local-signing.sh
 bash scripts/build.sh
 ```
 
-이미 존재하는 키를 재사용한다. 프로젝트에 지문이 고정된 뒤 다른 Mac에 키가 없거나 지문이 다르면 새 인증서를 만들지 않고 중단한다. 개인 키가 없어도 `swift build`와 `bash scripts/test.sh`로 소스 빌드·테스트를 할 수 있다. 설치 가능한 앱 번들·DMG·Release는 원래 서명 Mac에서 만든다. 인증서 파일만 복사해서는 서명할 수 없다.
+이미 존재하는 키를 재사용한다. 프로젝트에 지문이 고정된 뒤 키가 없거나 지문이 다르면 새 인증서를 만들지 않고 중단한다. 개인 키가 없어도 `swift build`와 `bash scripts/test.sh`로 소스 빌드·테스트를 할 수 있다. 설치 가능한 앱 번들·DMG·Release를 만들려면 기존 서명 키가 필요하다. 다른 Mac에서 빌드하려면 아래 복원 절차를 따른다.
 
 `scripts/build.sh`는 키 유효성을 먼저 확인하고 임시 폴더에서 앱을 조립한다. 실패하면 기존 `build/Lookout.app`을 보존하며, 임시 서명으로 자동 전환하지 않는다. 본체와 두 도우미의 식별자는 각각 다음과 같다.
 
@@ -35,6 +35,51 @@ bash scripts/build.sh
 - `local.lookout.window-helper`
 
 세 구성 요소는 같은 Lookout 인증서로 서명하되 서로의 식별자나 권한은 합치지 않는다. helper 캐시는 인증서 지문을 포함하며 기존 ad-hoc 캐시를 새 고정 서명 대신 사용하지 않는다. 캐시를 읽을 때에도 해당 식별자·인증서·모든 아키텍처의 서명을 검사한다. 공개 캐시에는 개인 키가 없다.
+
+## 다른 Mac에서 서명 복원과 빌드
+
+빌드할 사용자 계정에 Xcode와 Python 3를 준비하고, 터미널에서 Lookout 저장소 루트로 이동한다. Xcode 요구 사항은 [빌드와 실행](../README.md#빌드와-실행)을 참고한다. 아래 `/Volumes/암호화백업/Lookout`은 실제 백업 위치로 바꾼다.
+
+### 1. Signing 폴더 복사
+
+원래 Mac에서 백업한 `Signing` 폴더를 새 Mac의 `~/Library/Application Support/Lookout/Signing/`에 복사한다. `~`는 새 Mac에서 빌드하는 계정의 홈 폴더다. 아래 명령은 대상 폴더가 없을 때만 복사한다. 폴더가 이미 있으면 기존 서명 파일부터 확인한다.
+
+```sh
+lookout_signing="$HOME/Library/Application Support/Lookout/Signing"
+test ! -e "$lookout_signing" &&
+  mkdir -p "$(dirname "$lookout_signing")" &&
+  ditto "/Volumes/암호화백업/Lookout/Signing" "$lookout_signing" &&
+  chmod 700 "$lookout_signing" &&
+  chmod 600 "$lookout_signing/Lookout.keychain-db" "$lookout_signing/password"
+```
+
+복사한 폴더에 `Lookout.keychain-db`, `password`, `certificate.cer`, `identity.sha1`이 모두 있어야 한다.
+
+### 2. 인증서 등록과 앱 빌드
+
+설정 스크립트가 복사한 인증서의 지문을 저장소의 고정값과 대조하고 전용 키체인을 연다. 이어서 `certificate.cer`를 현재 사용자 계정의 코드 서명 정책에 신뢰 등록하고 빌드한다. macOS가 신뢰 설정 변경 승인을 요청하면 새 Mac에서 승인한다. [Apple `security` 명령 문서](https://github.com/apple-oss-distributions/Security/blob/main/SecurityTool/macOS/security.1)
+
+```sh
+lookout_signing="$HOME/Library/Application Support/Lookout/Signing"
+bash scripts/setup-local-signing.sh &&
+  security add-trusted-cert -r trustRoot -p codeSign \
+    -k "$lookout_signing/Lookout.keychain-db" "$lookout_signing/certificate.cer" &&
+  bash scripts/build.sh
+```
+
+빌드가 성공하면 `build/Lookout.app`이 생성된다. 앱 빌드나 DMG 생성은 여기까지면 충분하다. 복사한 키체인으로 다른 실기기에서 서명하는 전체 과정은 아직 검증하지 않았으므로, 새 Mac에서 빌드가 성공할 때까지 원본 Mac의 키를 보관한다.
+
+### 3. 기존 Sparkle 키 가져오기
+
+Sparkle 업데이트 ZIP까지 배포하려면, 2단계 빌드가 받아온 `generate_keys`로 기존 `Lookout-Sparkle.key`를 새 Mac의 로그인 키체인에 가져온다. 이미 `local.lookout.app` 계정의 키가 있으면 `-p`로 공개 키를 조회한다. `Resources/UpdateConfiguration.json`의 `publicKey`와 일치하면 기존 키를 사용한다. 다른 키가 있으면 백업 출처와 계정을 먼저 확인한다. [Sparkle 공식 문서](https://sparkle-project.org/documentation/#eddsa-ed25519-signatures)
+
+```sh
+.build/artifacts/sparkle/Sparkle/bin/generate_keys \
+  --account local.lookout.app -f "/Volumes/암호화백업/Lookout/Lookout-Sparkle.key"
+.build/artifacts/sparkle/Sparkle/bin/generate_keys --account local.lookout.app -p
+```
+
+두 번째 명령이 출력한 공개 키가 `Resources/UpdateConfiguration.json`의 `publicKey`와 일치하는지 확인한다. 배포 스크립트도 ZIP에 서명하기 전에 같은 값을 검사한다. 다음 버전 준비와 게시 절차는 [업데이트 배포](UPDATE_RELEASE.md)를 따른다.
 
 ## 업데이트 검증
 

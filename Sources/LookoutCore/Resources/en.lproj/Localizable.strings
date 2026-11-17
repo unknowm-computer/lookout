@@ -402,6 +402,7 @@
 "창 배치를 저장했습니다." = "The window layout is saved.";
 
 "저장된 모니터 구성이 안정될 때까지 기다립니다. 기존 배치는 보관합니다." = "Waiting for the saved display setup to stabilize. The existing layout is preserved.";
+"제한 시간 안에 모니터 구성이 안정되지 않았습니다. 모니터를 확인한 뒤 직접 복원해주세요." = "The saved display setup did not stabilize in time. Check your displays and restore the layout manually.";
 
 "창 배치를 복원하는 중…" = "Restoring window layout…";
 

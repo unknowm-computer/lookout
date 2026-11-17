@@ -14,6 +14,6 @@ public struct WindowAccessReport: Codable, Equatable, Sendable {
 }
 
 public enum WindowLayoutPhase: Codable, Equatable, Sendable {
-    case disabled, permission, ready, saved, waiting, restoring, restored(Int, Int), incomplete, captureFailed
+    case disabled, permission, ready, saved, waiting, restoring, restored(Int, Int), incomplete, captureFailed, displayNotReady
 
 }

@@ -20,6 +20,7 @@ extension WindowLayoutPhase {
         case .ready: L10n.text("첫 정상 배치를 저장할 준비 중입니다.")
         case .saved: L10n.text("창 배치를 저장했습니다.")
         case .waiting: L10n.text("저장된 모니터 구성이 안정될 때까지 기다립니다. 기존 배치는 보관합니다.")
+        case .displayNotReady: L10n.text("제한 시간 안에 모니터 구성이 안정되지 않았습니다. 모니터를 확인한 뒤 직접 복원해주세요.")
         case .restoring: L10n.text("창 배치를 복원하는 중…")
         case .restored(let count, let skipped): L10n.text("\(count)개 창 복원 · \(skipped)개 건너뜀")
         case .incomplete: L10n.text("일부 창을 복원하지 못했습니다. 기존 배치를 보관합니다.")
