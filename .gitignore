@@ -3,6 +3,8 @@ build/
 .swiftpm/
 .DS_Store
 __pycache__/
+# Local helper build cache. Add selected signed release artifacts with git add -f.
+/.helper-artifacts/
 # Private code-signing material belongs outside the checkout.
 *.keychain-db
 *.keychain-db-*
