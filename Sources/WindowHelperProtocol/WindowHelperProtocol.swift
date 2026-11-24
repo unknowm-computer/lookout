@@ -18,6 +18,30 @@ public enum WindowHelperEndpoint {
     func stateChanged(_ data: Data)
 }
 
+public enum WindowLayoutCaptureInterval: Int, CaseIterable, Codable, Sendable {
+    case thirtySeconds = 30
+    case oneMinute = 60
+    case fiveMinutes = 300
+    case tenMinutes = 600
+
+    public static let defaultValue: Self = .oneMinute
+    public var duration: Duration { .seconds(rawValue) }
+}
+
+/// Settings passed through the existing configuration argument. Snapshots remain owned by the helper.
+public struct WindowHelperConfiguration: Codable, Sendable {
+    public let captureInterval: WindowLayoutCaptureInterval
+
+    public init(captureInterval: WindowLayoutCaptureInterval) {
+        self.captureInterval = captureInterval
+    }
+
+    public static func decode(_ data: Data?) -> Self? {
+        guard let data, data.count <= 256 else { return nil }
+        return try? JSONDecoder().decode(Self.self, from: data)
+    }
+}
+
 public struct WindowHelperState: Codable, Sendable {
     public var version = WindowHelperEndpoint.version
     public var enabled: Bool
@@ -25,6 +49,8 @@ public struct WindowHelperState: Codable, Sendable {
     public var phase: WindowLayoutPhase
     public var permission: WindowAccessReport
     public var savedAt: Date?
+    /// Last successful periodic in-memory capture during this session, even after it is saved to disk.
+    public var lastRecentCaptureAt: Date?
     public var backupAt: Date?
     public var pending: Bool
     public var processID: Int32

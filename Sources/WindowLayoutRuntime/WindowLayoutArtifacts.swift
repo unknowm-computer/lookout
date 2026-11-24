@@ -24,6 +24,7 @@ struct WindowLayoutLogEvent: Codable {
     let date: Date
     let action: String
     let result: String
+    let trigger: String?
     var layoutDate: Date?
     var windows: Int?
     var expectedDisplays: [Display]?
@@ -34,9 +35,9 @@ struct WindowLayoutLogEvent: Codable {
     var issues: [Issue]?
 
     init(_ action: String, _ result: String, layout: WindowLayoutSnapshot? = nil,
-         displays: [LayoutDisplay]? = nil, report: WindowRestoreReport? = nil) {
+         displays: [LayoutDisplay]? = nil, report: WindowRestoreReport? = nil, trigger: String? = nil) {
         date = Date()
-        self.action = action; self.result = result
+        self.action = action; self.result = result; self.trigger = trigger
         layoutDate = layout?.date; windows = layout?.windows.count
         expectedDisplays = layout?.displays.map(Display.init)
         self.displays = displays.map { Array($0.prefix(16)).map(Display.init) }

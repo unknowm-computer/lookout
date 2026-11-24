@@ -1,20 +1,30 @@
 import AppKit
 import ApplicationServices
 import ColorSync
+import CryptoKit
+import Darwin
 import WindowLayoutModel
 
 @MainActor protocol WindowLayoutBackend: AnyObject {
     var isTrusted: Bool { get }
+    var hasAwakeExternalDisplay: Bool { get }
+    var isScreenLocked: Bool { get }
+    var areScreensAsleep: Bool { get }
     func checkPermission() -> WindowAccessReport
     func displays() -> [LayoutDisplay]
     func capture(timeBudget: TimeInterval) -> WindowLayoutSnapshot?
+    func retainReferences(for windows: Set<UUID>)
     func restore(_ windows: [LayoutWindow], displays: [LayoutDisplay], identityScope: [LayoutWindow]) -> WindowRestoreResult
 }
 
 extension WindowLayoutBackend {
+    var isScreenLocked: Bool { false }
+    var areScreensAsleep: Bool { false }
+
     func checkPermission() -> WindowAccessReport {
         WindowAccessReport(trustedAPI: isTrusted, query: .notChecked)
     }
+    func retainReferences(for windows: Set<UUID>) {}
 }
 
 struct WindowRestoreResult {
@@ -37,6 +47,18 @@ struct WindowRestoreResult {
     private var references: [UUID: AXUIElement] = [:]
     private var access: WindowAccessReport?
     var isTrusted: Bool { access?.canAccess ?? AXIsProcessTrusted() }
+    var isScreenLocked: Bool {
+        let session = CGSessionCopyCurrentDictionary() as? [String: Any]
+        return (session?["CGSSessionScreenIsLocked"] as? Bool) ?? false
+    }
+    var areScreensAsleep: Bool { CGDisplayIsAsleep(CGMainDisplayID()) != 0 }
+    var hasAwakeExternalDisplay: Bool {
+        NSScreen.screens.contains { screen in
+            guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else { return false }
+            let display = number.uint32Value
+            return CGDisplayIsBuiltin(display) == 0 && CGDisplayIsAsleep(display) == 0
+        }
+    }
     func checkPermission() -> WindowAccessReport {
         let report = WindowAccessDiagnostics.check()
         access = report
@@ -64,6 +86,7 @@ struct WindowRestoreResult {
         let deadline = ProcessInfo.processInfo.systemUptime + timeBudget
         guard !screens.isEmpty else { return nil }
         var records: [LayoutWindow] = [], elements: [UUID: AXUIElement] = [:]
+        var incompleteDocuments = Set<String>()
         var isPartial = false
         apps: for app in NSWorkspace.shared.runningApplications where app.activationPolicy == .regular && app.processIdentifier != getpid() && app.bundleIdentifier != "local.lookout.app" {
             guard ProcessInfo.processInfo.systemUptime < deadline else {
@@ -77,6 +100,10 @@ struct WindowRestoreResult {
             let error = AXUIElementCopyAttributeValue(application, kAXWindowsAttribute as CFString, &raw)
             if error == .apiDisabled { return nil }
             if error == .cannotComplete {
+                // AppKit can still list a process that has already exited.
+                // Only a process that might have windows can make this capture incomplete.
+                guard !app.isTerminated else { continue }
+                if kill(app.processIdentifier, 0) == -1, errno == ESRCH { continue }
                 isPartial = true
                 continue
             }
@@ -90,104 +117,186 @@ struct WindowRestoreResult {
                 guard eligible(window), let frame = frame(window),
                       let screen = screens.max(by: { $0.frame.intersectionArea(with: frame) < $1.frame.intersectionArea(with: frame) }),
                       screen.frame.intersectionArea(with: frame) > 0 else { continue }
+                let reading = readIdentity(window)
+                let identity = reading.identity
+                if reading.documentError != nil { incompleteDocuments.insert(bundle) }
                 let record = LayoutWindow(bundleID: bundle, pid: app.processIdentifier, launchDate: launch,
-                                          identifier: string(window, kAXIdentifierAttribute), title: string(window, kAXTitleAttribute),
-                                          displayID: screen.id,
+                                          identifier: identity.identifier, title: identity.title, displayID: screen.id,
                                           frame: LayoutRect(x: frame.x - screen.frame.x, y: frame.y - screen.frame.y,
-                                                            width: frame.width, height: frame.height))
+                                                            width: frame.width, height: frame.height),
+                                          documentDigest: identity.documentDigest)
                 records.append(record); elements[record.id] = window
             }
         }
         guard LayoutDisplay.sameTopology(screens, displays()) else { return nil }
+        for index in records.indices where incompleteDocuments.contains(records[index].bundleID) {
+            records[index].documentDigest = nil
+        }
         let snapshot = WindowLayoutSnapshot(displays: screens, windows: records, savedWithOmissions: isPartial ? true : nil)
         guard snapshot.isValid else { return nil }
-        // Retain the previous snapshot's handles as well, for safe same-session backup restoration.
         references.merge(elements) { _, new in new }
-        if references.count > 400 { references = elements }
         return snapshot
+    }
+
+    func retainReferences(for windows: Set<UUID>) {
+        references = references.filter { windows.contains($0.key) }
     }
 
     func restore(_ windows: [LayoutWindow], displays: [LayoutDisplay], identityScope: [LayoutWindow]) -> WindowRestoreResult {
         var result = WindowRestoreResult()
         let deadline = ProcessInfo.processInfo.systemUptime + 3
-        var cached: [Int32: [AXUIElement]] = [:]
-        var identities: [Int32: [WindowIdentity]] = [:]
-        var unavailable: [Int32: AXError] = [:]
-        var claimed: [Int32: Set<Int>] = [:]
-        let attemptedIDs = Set(windows.map(\.id))
-        for record in windows {
-            guard isTrusted else { result.fail(record, reason: .permissionDenied); continue }
-            guard ProcessInfo.processInfo.systemUptime < deadline else { result.fail(record, reason: .timeBudget); continue }
-            guard let app = NSRunningApplication(processIdentifier: record.pid), !app.isTerminated,
-                  app.bundleIdentifier == record.bundleID,
-                  WindowProcessIdentity.launchDate(for: app) == record.launchDate else { result.skipped += 1; continue }
-            if cached[record.pid] == nil && unavailable[record.pid] == nil {
-                let application = AXUIElementCreateApplication(record.pid)
-                AXUIElementSetMessagingTimeout(application, 0.12)
-                var raw: CFTypeRef?
-                let error = AXUIElementCopyAttributeValue(application, kAXWindowsAttribute as CFString, &raw)
-                if error == .success,
-                   let list = raw as? [AXUIElement] { cached[record.pid] = list }
-                else { unavailable[record.pid] = error }
-            }
-            guard let list = cached[record.pid] else {
-                let error = unavailable[record.pid]
-                result.fail(record, reason: error == .apiDisabled ? .permissionDenied : .appUnresponsive,
-                            code: error?.rawValue, app: app.localizedName)
+        let requests = Dictionary(grouping: windows, by: \.bundleID)
+        let scopes = Dictionary(grouping: identityScope, by: \.bundleID)
+        var handled = Set<String>()
+        for record in windows where handled.insert(record.bundleID).inserted {
+            guard let requested = requests[record.bundleID] else { continue }
+            guard isTrusted else {
+                for window in requested { result.fail(window, reason: .permissionDenied) }
                 continue
             }
-            if list.isEmpty { result.skipped += 1; continue } // The app has no remaining windows.
-            let index: Int
-            if let saved = references[record.id], let match = list.firstIndex(where: { CFEqual($0, saved) }) { index = match }
-            else {
-                // Read each app's metadata once, rather than querying every window for every record.
-                if identities[record.pid] == nil && unavailable[record.pid] == nil {
-                    var values: [WindowIdentity] = []
-                    for window in list {
-                        guard ProcessInfo.processInfo.systemUptime < deadline else { break }
-                        AXUIElementSetMessagingTimeout(window, 0.12)
-                        var identifier: CFTypeRef?, title: CFTypeRef?
-                        let idError = AXUIElementCopyAttributeValue(window, kAXIdentifierAttribute as CFString, &identifier)
-                        let titleError = AXUIElementCopyAttributeValue(window, kAXTitleAttribute as CFString, &title)
-                        if let error = [idError, titleError].first(where: { ![.success, .attributeUnsupported, .noValue].contains($0) }) {
-                            unavailable[record.pid] = error; break
-                        }
-                        values.append(WindowIdentity(identifier: identifier as? String ?? "", title: title as? String ?? ""))
-                    }
-                    if values.count == list.count { identities[record.pid] = values }
+            guard ProcessInfo.processInfo.systemUptime < deadline else {
+                for window in requested { result.fail(window, reason: .timeBudget) }
+                continue
+            }
+            let scope = scopes[record.bundleID] ?? requested
+            let apps = NSRunningApplication.runningApplications(withBundleIdentifier: record.bundleID)
+                .filter { !$0.isTerminated }
+            var remaining = requested.count
+            // A different process is eligible only when the bundle has exactly one running instance.
+            let allowRestartedApp = apps.count == 1 && apps[0].activationPolicy == .regular
+            for app in apps {
+                guard let launchDate = WindowProcessIdentity.launchDate(for: app) else { continue }
+                let pid = app.processIdentifier
+                let targets = requested.filter {
+                    ($0.pid == pid && $0.launchDate == launchDate) || (allowRestartedApp && $0.documentDigest != nil)
                 }
-                guard let values = identities[record.pid] else {
-                    let error = unavailable[record.pid]
-                    result.fail(record, reason: error == .apiDisabled ? .permissionDenied : (error == nil ? .timeBudget : .appUnresponsive),
-                                code: error?.rawValue, app: app.localizedName)
-                    continue
-                }
-                switch WindowIdentityMatcher.match(record, scope: identityScope, candidates: values) {
-                case .found(let match): index = match
-                case .missing:
-                    result.fail(record, reason: .windowNotFound, app: app.localizedName); continue
-                case .ambiguous:
-                    result.fail(record, reason: .ambiguousIdentity, app: app.localizedName); continue
-                }
+                guard !targets.isEmpty else { continue }
+                remaining -= targets.count
+                restore(targets, for: app, launchDate: launchDate, scope: scope,
+                        allowRestartedApp: allowRestartedApp, displays: displays, deadline: deadline, result: &result)
             }
-            let reserved = identityScope.contains { other in
-                guard other.pid == record.pid, !attemptedIDs.contains(other.id), let element = references[other.id] else { return false }
-                return CFEqual(element, list[index])
-            }
-            guard !reserved, claimed[record.pid, default: []].insert(index).inserted else {
-                result.fail(record, reason: .ambiguousIdentity, app: app.localizedName); continue
-            }
-            let element = list[index]
-            AXUIElementSetMessagingTimeout(element, 0.12)
-            guard eligible(element), let target = record.target(on: displays) else { result.skipped += 1; continue }
-            // Do not activate apps, change Spaces, or unminimize/fullscreen windows.
-            if let failure = apply(target, to: element) {
-                result.fail(record, reason: failure.0, code: failure.1, app: app.localizedName)
-            } else {
-                result.restored += 1; references[record.id] = element
-            }
+            result.skipped += remaining
         }
         return result
+    }
+
+    private func restore(_ targets: [LayoutWindow], for app: NSRunningApplication, launchDate: Date,
+                         scope: [LayoutWindow], allowRestartedApp: Bool, displays: [LayoutDisplay],
+                         deadline: TimeInterval, result: inout WindowRestoreResult) {
+        guard ProcessInfo.processInfo.systemUptime < deadline else {
+            for record in targets { result.fail(record, reason: .timeBudget) }
+            return
+        }
+        let pid = app.processIdentifier
+        let application = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(application, 0.12)
+        var raw: CFTypeRef?
+        let error = AXUIElementCopyAttributeValue(application, kAXWindowsAttribute as CFString, &raw)
+        guard error == .success, let windows = raw as? [AXUIElement] else {
+            let reason: WindowRestoreFailure = error == .apiDisabled ? .permissionDenied : .appUnresponsive
+            for record in targets { result.fail(record, reason: reason, code: error.rawValue, app: app.localizedName) }
+            return
+        }
+
+        let referenced = Dictionary(uniqueKeysWithValues: scope.compactMap { record -> (UUID, Int)? in
+            guard let saved = references[record.id],
+                  let index = windows.firstIndex(where: { CFEqual($0, saved) }) else { return nil }
+            return (record.id, index)
+        })
+        var identities: [WindowIdentity] = []
+        var metadataFailure: WindowRestoreFailure?
+        var metadataError: AXError?
+        var documentError: AXError?
+        if !targets.allSatisfy({ $0.pid == pid && $0.launchDate == launchDate && referenced[$0.id] != nil }) {
+            for window in windows {
+                guard ProcessInfo.processInfo.systemUptime < deadline else {
+                    metadataFailure = .timeBudget
+                    break
+                }
+                AXUIElementSetMessagingTimeout(window, 0.12)
+                let reading = readIdentity(window)
+                if let error = reading.error {
+                    metadataFailure = error == .apiDisabled ? .permissionDenied : .appUnresponsive
+                    metadataError = error
+                    break
+                }
+                identities.append(reading.identity)
+                documentError = documentError ?? reading.documentError
+            }
+        }
+        // Incomplete metadata cannot establish that a match is unique.
+        let matches = WindowIdentityMatcher.match(scope: scope, candidates: metadataFailure == nil ? identities : [],
+            referenced: referenced, attempting: Set(targets.map(\.id)), pid: pid, launchDate: launchDate,
+            allowRestartedApp: allowRestartedApp,
+            documentsComplete: documentError == nil)
+        for record in targets {
+            guard isTrusted else { result.fail(record, reason: .permissionDenied); continue }
+            guard ProcessInfo.processInfo.systemUptime < deadline else { result.fail(record, reason: .timeBudget); continue }
+            if windows.isEmpty && record.pid == pid && record.launchDate == launchDate {
+                result.skipped += 1
+                continue
+            }
+            switch matches[record.id] ?? .missing {
+            case .missing:
+                let lookupError = metadataError ?? (record.documentDigest == nil ? nil : documentError)
+                let reason: WindowRestoreFailure
+                if let metadataFailure { reason = metadataFailure }
+                else if lookupError == .apiDisabled { reason = .permissionDenied }
+                else { reason = lookupError == nil ? .windowNotFound : .appUnresponsive }
+                result.fail(record, reason: reason, code: lookupError?.rawValue, app: app.localizedName)
+            case .ambiguous:
+                result.fail(record, reason: .ambiguousIdentity, app: app.localizedName)
+            case .found(let index):
+                let element = windows[index]
+                AXUIElementSetMessagingTimeout(element, 0.12)
+                guard eligible(element), let target = record.target(on: displays) else { result.skipped += 1; continue }
+                // Do not activate apps, change Spaces, or unminimize/fullscreen windows.
+                if let failure = apply(target, to: element) {
+                    result.fail(record, reason: failure.0, code: failure.1, app: app.localizedName)
+                } else {
+                    result.restored += 1
+                    references[record.id] = element
+                }
+            }
+        }
+    }
+
+    private func readIdentity(_ window: AXUIElement) -> (identity: WindowIdentity, error: AXError?, documentError: AXError?) {
+        let attributes = [kAXIdentifierAttribute, kAXTitleAttribute, kAXDocumentAttribute]
+        var raw: CFArray?
+        let error = AXUIElementCopyMultipleAttributeValues(window, attributes as CFArray, [], &raw)
+        guard error == .success, let values = raw as? [AnyObject], values.count == attributes.count else {
+            // Keep the original identity lookup for apps that do not handle batched attributes.
+            let identifier = readAttribute(window, kAXIdentifierAttribute)
+            let title = readAttribute(window, kAXTitleAttribute)
+            let document = readAttribute(window, kAXDocumentAttribute)
+            return (WindowIdentity(identifier: identifier.value, title: title.value, documentDigest: documentDigest(document.value)),
+                    identifier.error ?? title.error, document.error)
+        }
+        func attributeError(_ value: AnyObject) -> AXError? {
+            guard CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
+            var failure = AXError.success
+            if AXValueGetValue(unsafeDowncast(value, to: AXValue.self), .axError, &failure),
+               ![.success, .attributeUnsupported, .noValue].contains(failure) {
+                return failure
+            }
+            return nil
+        }
+        return (WindowIdentity(identifier: values[0] as? String ?? "", title: values[1] as? String ?? "",
+                               documentDigest: documentDigest(values[2] as? String ?? "")),
+                attributeError(values[0]) ?? attributeError(values[1]), attributeError(values[2]))
+    }
+
+    private func readAttribute(_ window: AXUIElement, _ attribute: String) -> (value: String, error: AXError?) {
+        var raw: CFTypeRef?
+        let error = AXUIElementCopyAttributeValue(window, attribute as CFString, &raw)
+        return (raw as? String ?? "", [.success, .attributeUnsupported, .noValue].contains(error) ? nil : error)
+    }
+
+    private func documentDigest(_ address: String) -> Data? {
+        guard address.utf8.count <= 16_384, let url = URL(string: address), url.scheme != nil else { return nil }
+        // Paths can reveal document names. Retain only a digest for equality checks.
+        return Data(SHA256.hash(data: Data(url.absoluteString.utf8)))
     }
 
     private func value(_ element: AXUIElement, _ name: String) -> CFTypeRef? {

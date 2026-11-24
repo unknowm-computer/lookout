@@ -3,9 +3,15 @@ import Combine
 import WindowLayoutModel
 import WindowHelperProtocol
 
-/// Separate from metric sampling: no window polling while idle, and no AX work when disabled.
+/// Keeps window layout capture separate from metric sampling.
 @MainActor final class WindowLayoutService: ObservableObject {
     typealias Status = WindowLayoutPhase
+    private enum PauseTrigger: String {
+        case systemSleep, screenSleep, screenLock
+    }
+    private enum ResumeTrigger: String {
+        case systemWake, screenWake, screenUnlock
+    }
     @Published private(set) var permission = WindowAccessReport(trustedAPI: false, query: .notChecked)
     @Published private(set) var enabled: Bool
     @Published private(set) var trusted = false
@@ -27,10 +33,19 @@ import WindowHelperProtocol
     private let now: () -> TimeInterval
     private let step: Duration
     private let attempts: Int
+    private var recentCaptureInterval: Duration
     private var changedAt: TimeInterval
     private var task: Task<Void, Never>?
+    private var recentCaptureTask: Task<Void, Never>?
+    private var recent: WindowLayoutSnapshot?
+    @Published private var lastRecentCaptureAt: Date?
+    private var recentFrozen = false
     private var generation = 0
     private var sleeping = false
+    private var screensSleeping = false
+    private var screenLocked = false
+    private var pendingResume: ResumeTrigger?
+    private var desktopAvailable: Bool { !sleeping && !screensSleeping && !screenLocked }
     private var previewCapture: Task<[Data], Never>?
     private var observedDisplays: [LayoutDisplay]?
     private var observers: [(NotificationCenter, NSObjectProtocol)] = []
@@ -47,12 +62,14 @@ import WindowHelperProtocol
          observe: Bool = true, startEnabled: Bool = true, step: Duration = .seconds(1), attempts: Int = 30,
          bootSessionID: String? = WindowBootSession.currentID(),
          artifacts: WindowLayoutArtifacts? = nil,
+         recentCaptureInterval: Duration = WindowLayoutCaptureInterval.defaultValue.duration,
          now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
         self.defaults = defaults; self.backend = backend ?? AccessibilityWindowLayoutBackend()
         self.bootSessionID = bootSessionID
         self.artifacts = artifacts
         previewEnabled = defaults.bool(forKey: Self.previewKey)
         self.now = now; self.step = step; self.attempts = attempts; changedAt = now()
+        self.recentCaptureInterval = recentCaptureInterval
         // Old/unscoped snapshots must never be adopted as belonging to this boot.
         // Checking at startup also covers shutdowns where no final notification was delivered.
         if bootSessionID == nil || defaults.string(forKey: Self.bootSessionKey) != bootSessionID {
@@ -72,17 +89,27 @@ import WindowHelperProtocol
         observedDisplays = snapshot?.displays
         artifacts?.retainPreviews(for: previewEnabled ? previewDates : [])
         if observe { installObservers() }
-        if enabled { refresh() }
+        if enabled { refresh(); startRecentCapture() }
     }
     func setEnabled(_ value: Bool) {
         guard value != enabled else { return }
         enabled = value; defaults.set(value, forKey: Self.enabledKey)
         cancel()
-        if value { changedAt = now(); refresh() }
-        else { previewCapture?.cancel(); status = .disabled }
+        if value { changedAt = now(); refresh(); startRecentCapture() }
+        else {
+            pendingResume = nil
+            stopRecentCapture()
+            previewCapture?.cancel()
+            status = .disabled
+        }
+    }
+    func setCaptureInterval(_ value: WindowLayoutCaptureInterval) {
+        guard recentCaptureInterval != value.duration else { return }
+        recentCaptureInterval = value.duration
+        if enabled { startRecentCapture() }
     }
     func refresh() {
-        guard enabled, !sleeping, !busy else { return }
+        guard enabled, desktopAvailable, !busy else { return }
         if previewEnabled { screenRecordingAllowed = CGPreflightScreenCaptureAccess() }
         guard bootSessionID != nil else { status = .captureFailed; return }
         permission = backend.checkPermission()
@@ -124,43 +151,84 @@ import WindowHelperProtocol
     func diagnostics() -> Data? { enabled ? artifacts?.diagnostics() : nil }
     private var previewDates: [Date] { [snapshot?.date, lastGood?.date].compactMap { $0 } }
     func willSleep() {
-        guard enabled, !sleeping else { return }
-        cancel(); sleeping = true
-        permission = backend.checkPermission()
-        trusted = permission.canAccess
-        if trusted { save() }
-        else { artifacts?.record(WindowLayoutLogEvent("automaticSave", "accessibilityDenied", layout: snapshot)) }
-        if snapshot != nil { pending = true; protectsBackup = true }
+        pauseDesktop(.systemSleep)
     }
     func didWake() {
         guard sleeping else { return }
         sleeping = false
-        pending = false
+        resumeDesktop(after: .systemWake)
+    }
+    func screensDidSleep() {
+        pauseDesktop(.screenSleep)
+    }
+    func screensDidWake() {
+        guard screensSleeping else { return }
+        screensSleeping = false
+        resumeDesktop(after: .screenWake)
+    }
+    func screenDidLock() {
+        pauseDesktop(.screenLock)
+    }
+    func screenDidUnlock() {
+        guard screenLocked else { return }
+        screenLocked = false
+        resumeDesktop(after: .screenUnlock)
+    }
+    private func pauseDesktop(_ trigger: PauseTrigger) {
+        // Lock, display sleep and system sleep may describe a single departure.
+        let wasAvailable = desktopAvailable
+        switch trigger {
+        case .systemSleep: sleeping = true
+        case .screenSleep: screensSleeping = true
+        case .screenLock: screenLocked = true
+        }
+        guard enabled, wasAvailable else { return }
+        cancel()
+        permission = backend.checkPermission()
+        trusted = permission.canAccess
+        if !trusted {
+            artifacts?.record(WindowLayoutLogEvent("automaticSave", "accessibilityDenied", layout: snapshot, trigger: trigger.rawValue))
+        }
+        if !trusted || !save(trigger: trigger) { useRecentLayout(trigger: trigger) }
+        if snapshot != nil { pending = true; protectsBackup = true }
+    }
+    private func resumeDesktop(after event: ResumeTrigger) {
         guard enabled else { return }
+        // A system wake may be followed by the display waking and the user unlocking.
+        // Consume a single request when all of those barriers have cleared.
+        if pendingResume != .systemWake { pendingResume = event }
+        if event != .screenUnlock, backend.isScreenLocked { screenLocked = true }
+        if event != .screenWake { screensSleeping = backend.areScreensAsleep }
+        guard desktopAvailable, let trigger = pendingResume else { return }
+        pendingResume = nil
+        pending = false
         changedAt = now()
-        if snapshot != nil { restoreNow(automatically: true) }
+        if snapshot != nil { restore(previous: false, trigger: trigger) }
         else { refresh() }
     }
     func displaysChanged() {
         guard enabled else { return }
         let displays = backend.displays()
+        freezeRecentIfDisplaysChanged(displays)
         if let observedDisplays, LayoutDisplay.sameTopology(observedDisplays, displays) { return }
         observedDisplays = displays
         changedAt = now()
         // A disconnect can precede willSleep. Protect the backup independently of any restore request.
         if snapshot != nil { protectsBackup = true }
-        else if !sleeping { refresh() }
+        else { refresh() }
     }
-    func restoreNow(previous: Bool = false, automatically: Bool = false) {
-        guard bootSessionID != nil, enabled, !sleeping, !busy, let saved = (previous ? lastGood : snapshot) else { return }
+    func restoreNow(previous: Bool = false) { restore(previous: previous, trigger: nil) }
+    private func restore(previous: Bool, trigger: ResumeTrigger?) {
+        guard bootSessionID != nil, enabled, desktopAvailable, !busy, let saved = (previous ? lastGood : snapshot) else { return }
         permission = backend.checkPermission()
         trusted = permission.canAccess
-        let action = previous ? "restoreBackup" : (automatically ? "automaticRestore" : "manualRestore")
+        let action = previous ? "restoreBackup" : (trigger != nil ? "automaticRestore" : "manualRestore")
         guard trusted else {
             status = .permission
-            artifacts?.record(WindowLayoutLogEvent(action, "accessibilityDenied", layout: saved))
+            artifacts?.record(WindowLayoutLogEvent(action, "accessibilityDenied", layout: saved, trigger: trigger?.rawValue))
             return
         }
+        if trigger == nil { clearRecentLayout() }
         cancel(); pending = true; protectsBackup = true; busy = true; status = .waiting; restoreReport = nil
         let token = generation
         task = Task { [weak self] in
@@ -178,7 +246,7 @@ import WindowHelperProtocol
                 guard self.enabled, self.generation == token, !Task.isCancelled else { return }
                 guard self.backend.isTrusted else {
                     self.trusted = false; self.status = .permission
-                    self.artifacts?.record(WindowLayoutLogEvent(action, "accessibilityDenied", layout: saved))
+                    self.artifacts?.record(WindowLayoutLogEvent(action, "accessibilityDenied", layout: saved, trigger: trigger?.rawValue))
                     return
                 }
                 let displays = self.backend.displays()
@@ -197,7 +265,7 @@ import WindowHelperProtocol
                         report.interrupted = interruption
                         self.restoreReport = report; self.status = .incomplete
                         self.artifacts?.record(WindowLayoutLogEvent(action, interruption.rawValue,
-                            layout: saved, displays: self.backend.displays(), report: report))
+                            layout: saved, displays: self.backend.displays(), report: report, trigger: trigger?.rawValue))
                         return
                     }
                     let retry = self.backend.restore(result.failed, displays: displays, identityScope: saved.windows)
@@ -208,7 +276,7 @@ import WindowHelperProtocol
                 guard self.backend.displays() == displays else {
                     self.restoreReport?.interrupted = .displayChanged; self.status = .incomplete
                     self.artifacts?.record(WindowLayoutLogEvent(action, "displayChanged", layout: saved,
-                        displays: self.backend.displays(), report: self.restoreReport))
+                        displays: self.backend.displays(), report: self.restoreReport, trigger: trigger?.rawValue))
                     return
                 }
                 // Closed or newly minimized/full-screen windows are deliberately skipped.
@@ -222,15 +290,19 @@ import WindowHelperProtocol
                     self.protectsBackup = false
                     self.status = .restored(result.restored, result.skipped)
                     self.observedDisplays = displays
-                    self.artifacts?.record(WindowLayoutLogEvent(action, "restored", layout: saved, displays: displays, report: result.report))
+                    self.retainWindowReferences()
+                    self.artifacts?.record(WindowLayoutLogEvent(action, "restored", layout: saved, displays: displays,
+                                                              report: result.report, trigger: trigger?.rawValue))
                 } else {
                     self.status = .incomplete
-                    self.artifacts?.record(WindowLayoutLogEvent(action, "incomplete", layout: saved, displays: displays, report: result.report))
+                    self.artifacts?.record(WindowLayoutLogEvent(action, "incomplete", layout: saved, displays: displays,
+                                                              report: result.report, trigger: trigger?.rawValue))
                 }
                 return
             }
             self.status = .displayNotReady
-            self.artifacts?.record(WindowLayoutLogEvent(action, "displayNotReady", layout: saved, displays: previousDisplays))
+            self.artifacts?.record(WindowLayoutLogEvent(action, "displayNotReady", layout: saved, displays: previousDisplays,
+                                                      trigger: trigger?.rawValue))
         }
     }
     private func scheduleBaseline() {
@@ -240,13 +312,13 @@ import WindowHelperProtocol
             guard let self else { return }
             defer { if self.generation == token { self.busy = false; self.task = nil } }
             do { try await Task.sleep(for: self.step * 2) } catch { return }
-            guard self.enabled, !self.sleeping, self.generation == token, !Task.isCancelled,
+            guard self.enabled, self.desktopAvailable, self.generation == token, !Task.isCancelled,
                   !self.pending, self.snapshot == nil else { return }
             self.save()
         }
     }
     func useCurrentLayout() {
-        guard enabled, !sleeping else { return }
+        guard enabled, desktopAvailable else { return }
         cancel()
         restoreReport = nil
         guard bootSessionID != nil else {
@@ -263,45 +335,119 @@ import WindowHelperProtocol
         }
         if save(automatically: false) { protectsBackup = false }
     }
-    @discardableResult private func save(automatically: Bool = true) -> Bool {
+
+    private func startRecentCapture() {
+        recentCaptureTask?.cancel()
+        let interval = recentCaptureInterval
+        let tolerance = min(.seconds(1), interval / 10)
+        recentCaptureTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: interval, tolerance: tolerance) } catch { return }
+                guard let self, !Task.isCancelled else { return }
+                self.captureRecentLayout()
+            }
+        }
+    }
+
+    private func stopRecentCapture() {
+        recentCaptureTask?.cancel()
+        recentCaptureTask = nil
+        clearRecentLayout()
+        lastRecentCaptureAt = nil
+    }
+
+    private func clearRecentLayout() {
+        recent = nil
+        recentFrozen = false
+        retainWindowReferences()
+    }
+
+    private func freezeRecentIfDisplaysChanged(_ displays: [LayoutDisplay]) {
+        if let recent, !LayoutDisplay.matches(recent.displays, displays) { recentFrozen = true }
+    }
+
+    private func captureRecentLayout() {
+        guard enabled, trusted, desktopAvailable, !busy, !recentFrozen, bootSessionID != nil,
+              let saved = snapshot, now() - changedAt >= 2 else { return }
+        let externalIsAwake = backend.hasAwakeExternalDisplay
+        guard externalIsAwake || recent != nil else { return }
+        let screens = backend.displays()
+        freezeRecentIfDisplaysChanged(screens)
+        guard externalIsAwake, !recentFrozen, LayoutDisplay.matches(saved.displays, screens) else { return }
+        defer { retainWindowReferences() }
+        guard var candidate = backend.capture(timeBudget: 2), candidate.isValid,
+              candidate.savedWithOmissions != true, candidate.date > saved.date,
+              candidate.date >= (recent?.date ?? .distantPast) else { return }
+        let finalDisplays = backend.displays()
+        freezeRecentIfDisplaysChanged(finalDisplays)
+        guard !recentFrozen, LayoutDisplay.sameTopology(screens, candidate.displays),
+              LayoutDisplay.sameTopology(screens, finalDisplays) else { return }
+        candidate.savedDuringPendingRestore = protectsBackup ? true : nil
+        recent = candidate
+        lastRecentCaptureAt = candidate.date
+    }
+
+    private func useRecentLayout(trigger: PauseTrigger) {
+        guard let recent, let saved = snapshot, recent.date > saved.date,
+              LayoutDisplay.matches(saved.displays, recent.displays),
+              let encoded = try? JSONEncoder().encode(recent), encoded.count <= 1_048_576 else { return }
+        persist(recent, encoded: encoded, action: "automaticSave", outcome: "savedRecentLayout", trigger: trigger)
+    }
+
+    private func retainWindowReferences() {
+        let ids = [current, lastGood, recent].compactMap { $0 }.flatMap { $0.windows.map(\.id) }
+        backend.retainReferences(for: Set(ids))
+    }
+
+    @discardableResult private func save(automatically: Bool = true, trigger: PauseTrigger? = nil) -> Bool {
         guard enabled else { return false }
         let action = automatically ? "automaticSave" : "manualSave"
         guard bootSessionID != nil, backend.isTrusted else {
-            artifacts?.record(WindowLayoutLogEvent(action, bootSessionID == nil ? "bootSessionUnavailable" : "accessibilityDenied"))
+            artifacts?.record(WindowLayoutLogEvent(action, bootSessionID == nil ? "bootSessionUnavailable" : "accessibilityDenied", trigger: trigger?.rawValue))
             return false
         }
         if automatically && now() - changedAt < 2 {
-            artifacts?.record(WindowLayoutLogEvent(action, "displaySettling", layout: snapshot))
+            artifacts?.record(WindowLayoutLogEvent(action, "displaySettling", layout: snapshot, trigger: trigger?.rawValue))
             return false
         }
         let screens = backend.displays()
         guard !screens.isEmpty,
               !automatically || snapshot.map({ LayoutDisplay.matches($0.displays, screens) }) != false else {
             status = .captureFailed
-            artifacts?.record(WindowLayoutLogEvent(action, "displayMismatch", layout: snapshot, displays: screens))
+            artifacts?.record(WindowLayoutLogEvent(action, "displayMismatch", layout: snapshot, displays: screens, trigger: trigger?.rawValue))
             return false
         }
-        let capture = startPreview(displays: screens)
+        // Screen lock and display sleep notifications arrive after the desktop is hidden.
+        let capture = trigger == .screenLock || trigger == .screenSleep ? nil : startPreview(displays: screens)
+        defer { retainWindowReferences() }
         guard var candidate = backend.capture(timeBudget: automatically ? 2 : 4), candidate.isValid else {
             capture?.cancel()
             status = .captureFailed
-            artifacts?.record(WindowLayoutLogEvent(action, "noValidCapture", layout: snapshot, displays: screens))
+            artifacts?.record(WindowLayoutLogEvent(action, "noValidCapture", layout: snapshot, displays: screens, trigger: trigger?.rawValue))
             return false
         }
         let finalDisplays = backend.displays()
         guard LayoutDisplay.sameTopology(screens, candidate.displays), LayoutDisplay.sameTopology(screens, finalDisplays) else {
             capture?.cancel()
             status = .captureFailed
-            artifacts?.record(WindowLayoutLogEvent(action, "displayChanged", layout: candidate, displays: finalDisplays))
+            artifacts?.record(WindowLayoutLogEvent(action, "displayChanged", layout: candidate, displays: finalDisplays, trigger: trigger?.rawValue))
             return false
         }
         candidate.savedDuringPendingRestore = automatically && protectsBackup ? true : nil
         guard let encoded = try? JSONEncoder().encode(candidate), encoded.count <= 1_048_576 else {
             capture?.cancel()
             status = .captureFailed
-            artifacts?.record(WindowLayoutLogEvent(action, "snapshotTooLarge", layout: candidate))
+            artifacts?.record(WindowLayoutLogEvent(action, "snapshotTooLarge", layout: candidate, trigger: trigger?.rawValue))
             return false
         }
+        let outcome = candidate.savedWithOmissions == true ? "savedWithOmissions" : "saved"
+        persist(candidate, encoded: encoded, action: action, outcome: outcome, trigger: trigger)
+        if let capture { storePreview(capture, for: candidate) }
+        return true
+    }
+
+    private func persist(_ candidate: WindowLayoutSnapshot, encoded: Data, action: String, outcome: String,
+                         trigger: PauseTrigger?) {
         // Keep a known baseline if several sleeps capture incomplete or still-unrestored layouts.
         if let current,
            lastGood == nil || (current.savedDuringPendingRestore != true && current.savedWithOmissions != true),
@@ -310,11 +456,10 @@ import WindowHelperProtocol
         }
         defaults.set(encoded, forKey: Self.currentKey)
         current = candidate
+        clearRecentLayout()
         observedDisplays = candidate.displays; restoreReport = nil; status = .saved
         artifacts?.retainPreviews(for: previewDates)
-        artifacts?.record(WindowLayoutLogEvent(action, candidate.savedWithOmissions == true ? "savedWithOmissions" : "saved", layout: candidate))
-        if let capture { storePreview(capture, for: candidate) }
-        return true
+        artifacts?.record(WindowLayoutLogEvent(action, outcome, layout: candidate, trigger: trigger?.rawValue))
     }
     private func startPreview(displays: [LayoutDisplay]) -> Task<[Data], Never>? {
         guard previewEnabled, artifacts != nil else { return nil }
@@ -346,7 +491,9 @@ import WindowHelperProtocol
         busy = false
     }
     func stop() {
+        pendingResume = nil
         cancel()
+        stopRecentCapture()
         previewCapture?.cancel()
         for (center, token) in observers { center.removeObserver(token) }
         observers.removeAll()
@@ -359,8 +506,15 @@ import WindowHelperProtocol
             observers.append((center, token))
         }
         let workspace = NSWorkspace.shared.notificationCenter
+        screensSleeping = backend.areScreensAsleep
+        screenLocked = backend.isScreenLocked
         add(workspace, NSWorkspace.willSleepNotification) { $0.willSleep() }
         add(workspace, NSWorkspace.didWakeNotification) { $0.didWake() }
+        add(workspace, NSWorkspace.screensDidSleepNotification) { $0.screensDidSleep() }
+        add(workspace, NSWorkspace.screensDidWakeNotification) { $0.screensDidWake() }
+        let session = DistributedNotificationCenter.default()
+        add(session, Notification.Name("com.apple.screenIsLocked")) { $0.screenDidLock() }
+        add(session, Notification.Name("com.apple.screenIsUnlocked")) { $0.screenDidUnlock() }
         add(.default, NSApplication.didBecomeActiveNotification) { $0.refresh() }
         add(.default, NSApplication.didChangeScreenParametersNotification) { $0.displaysChanged() }
     }
@@ -368,6 +522,7 @@ import WindowHelperProtocol
         var report = WindowHelperState(enabled: enabled, busy: busy, phase: status, permission: permission,
                           savedAt: snapshot?.date, backupAt: lastGood?.date, pending: pending, processID: getpid(),
                           restoreReport: restoreReport, savedWithOmissions: snapshot?.savedWithOmissions)
+        report.lastRecentCaptureAt = lastRecentCaptureAt
         report.previewEnabled = previewEnabled
         report.screenRecordingAllowed = previewEnabled ? screenRecordingAllowed : nil
         if previewEnabled {

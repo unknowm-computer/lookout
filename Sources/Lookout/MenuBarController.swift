@@ -4,7 +4,7 @@ import LookoutCore
 import SwiftUI
 
 /// Own the status buttons and popup size together. SwiftUI supplies content, not a second window-size policy.
-@MainActor final class MenuBarController: NSObject, ObservableObject, NSPopoverDelegate {
+@MainActor final class MenuBarController: NSObject, ObservableObject, NSPopoverDelegate, NSWindowDelegate {
     @Published private(set) var presented = false
     @Published private(set) var displayedMetrics: [Metric] = []
     var displayedUnits: [MenuBarUnit] { settings.configuration.menuBarGrouping.units(metrics: displayedMetrics) }
@@ -43,6 +43,8 @@ import SwiftUI
     private var selectedMetrics: [Metric]?
     private let popover = NSPopover()
     private var settingsWindow: NSWindow?
+    private var settingsWindowOrigin: NSPoint?
+    @Published var settingsTab = 0
     private lazy var detailWindow = DetailWindowController(monitor: monitor, settings: settings,
                                                           openSettings: { [weak self] in self?.showSettings() })
     private var subscriptions: Set<AnyCancellable> = []
@@ -322,12 +324,31 @@ import SwiftUI
             window.title = L10n.text("Lookout 설정")
             window.styleMask = [.titled, .closable, .miniaturizable]
             window.isReleasedWhenClosed = false
+            window.delegate = self
             window.setContentSize(NSSize(width: 480, height: 560))
-            window.center()
+            if let origin = settingsWindowOrigin {
+                let titleCenter = NSPoint(x: origin.x + window.frame.width / 2,
+                                          y: origin.y + window.frame.height - 1)
+                // Center the window if its saved title bar is no longer on a usable display.
+                if NSScreen.screens.contains(where: { $0.visibleFrame.contains(titleCenter) }) {
+                    window.setFrameOrigin(origin)
+                } else {
+                    window.center()
+                }
+            } else {
+                window.center()
+            }
             settingsWindow = window
         }
         settingsWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard let window = settingsWindow, notification.object as? NSWindow === window else { return }
+        settingsWindowOrigin = window.frame.origin
+        window.contentViewController = nil
+        settingsWindow = nil
     }
 }
 

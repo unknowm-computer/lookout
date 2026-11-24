@@ -9,7 +9,9 @@ import WindowHelperProtocol
 /// The UI owns preferences; the user-session helper owns AX objects and sleep/wake handling.
 @MainActor final class WindowLayoutClient: ObservableObject {
     static let enabledKey = "windowLayout.enabled.v1"
+    static let captureIntervalKey = "windowLayout.captureInterval.v1"
     @Published private(set) var enabled: Bool
+    @Published private(set) var captureInterval: WindowLayoutCaptureInterval
     @Published private(set) var state: WindowHelperState?
     @Published private(set) var connecting = false
     @Published private(set) var connectionError: String?
@@ -22,6 +24,7 @@ import WindowHelperProtocol
     private var generation = 0
     private var requestsPermissionAfterSetup = false
     private var saveAfterRequest = false
+    private var configureAfterRequest = false
     private let requestOverride: (@MainActor (String?, Bool, Data?) async throws -> Data?)?
     private let connectionFactory: (@MainActor () throws -> (NSXPCConnection, String))?
     init(defaults: UserDefaults = .standard, revision: String? = nil,
@@ -31,6 +34,7 @@ import WindowHelperProtocol
          requestOverride: (@MainActor (String?, Bool, Data?) async throws -> Data?)? = nil) {
         self.defaults = defaults; self.connectionFactory = connectionFactory; self.requestOverride = requestOverride
         enabled = defaults.bool(forKey: Self.enabledKey)
+        captureInterval = WindowLayoutCaptureInterval(rawValue: defaults.integer(forKey: Self.captureIntervalKey)) ?? .defaultValue
         maintenance = FanHelperMaintenance(defaults: defaults,
             revision: revision ?? (try? HelperRevision.current(.window)), kind: .window,
             service: registrationService, settle: settle)
@@ -64,6 +68,14 @@ import WindowHelperProtocol
         guard enabled != value else { return }
         enabled = value; defaults.set(value, forKey: Self.enabledKey)
         if value { install() } else { stop() }
+    }
+    func setCaptureInterval(_ value: WindowLayoutCaptureInterval) {
+        guard value != captureInterval else { return }
+        captureInterval = value
+        defaults.set(value.rawValue, forKey: Self.captureIntervalKey)
+        guard enabled else { return }
+        if connecting { configureAfterRequest = true }
+        else { send(action: nil) }
     }
     func refresh() {
         maintenance.refresh()
@@ -147,6 +159,7 @@ import WindowHelperProtocol
     private func disconnect() {
         generation += 1
         saveAfterRequest = false
+        configureAfterRequest = false
         connection?.invalidationHandler = nil; connection?.interruptionHandler = nil
         connection?.invalidate(); connection = nil; events = nil; state = nil; connecting = false
     }
@@ -158,7 +171,11 @@ import WindowHelperProtocol
             defer {
                 if generation == token {
                     connecting = false
-                    if saveAfterRequest {
+                    if configureAfterRequest {
+                        configureAfterRequest = false
+                        send(action: nil)
+                    }
+                    if !connecting && saveAfterRequest {
                         saveAfterRequest = false
                         useCurrentLayout()
                     }
@@ -186,12 +203,13 @@ import WindowHelperProtocol
         }
     }
     private func request(action: String?, token: Int) async throws -> Data? {
-        if let requestOverride { return try await requestOverride(action, enabled, nil) }
+        let configuration = try action == nil ? JSONEncoder().encode(WindowHelperConfiguration(captureInterval: captureInterval)) : nil
+        if let requestOverride { return try await requestOverride(action, enabled, configuration) }
         let proxy = try channel(token: token)
         return try await withCheckedThrowingContinuation { continuation in
             let gate = WindowReplyGate(continuation)
             if let action { proxy.perform(action) { gate.complete(.success($0)) } }
-            else { proxy.configure(enabled, legacy: nil) { gate.complete(.success($0)) } }
+            else { proxy.configure(enabled, legacy: configuration) { gate.complete(.success($0)) } }
             DispatchQueue.global().asyncAfter(deadline: .now() + 8) { gate.complete(.failure(WindowConnectionError.timeout)) }
         }
     }

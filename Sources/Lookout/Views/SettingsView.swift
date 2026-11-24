@@ -6,7 +6,6 @@ struct SettingsView: View {
     @ObservedObject var monitor: MonitoringCoordinator
     @ObservedObject var updates: UpdateService
     @ObservedObject var menuBar: MenuBarController
-    @State private var tab = 0
     @State private var showingUpdates = false
     @State private var showingLanguageRestart = false
     @State private var restarting = false
@@ -20,14 +19,14 @@ struct SettingsView: View {
                     Text(L10n.text("필요한 정보만, 메뉴바에서.")).font(.system(size: 11)).foregroundStyle(.secondary)
                 }
             }
-            HoverSegmentedPicker(title: L10n.text("설정 영역"), selection: $tab, options: [
+            HoverSegmentedPicker(title: L10n.text("설정 영역"), selection: $menuBar.settingsTab, options: [
                 SegmentOption(value: 0, title: L10n.text("모니터링")),
                 SegmentOption(value: 2, title: L10n.text("알림")),
                 SegmentOption(value: 1, title: L10n.text("메뉴바"))
             ])
-            if tab == 0 {
+            if menuBar.settingsTab == 0 {
                 ScrollView { monitoring.padding(.trailing, 3) }
-            } else if tab == 1 { MenuBarSettingsView(settings: settings, menuBar: menuBar) }
+            } else if menuBar.settingsTab == 1 { MenuBarSettingsView(settings: settings, menuBar: menuBar) }
             else { AlertSettingsView(settings: settings, notifications: monitor.notifications) }
             Divider()
             HStack {

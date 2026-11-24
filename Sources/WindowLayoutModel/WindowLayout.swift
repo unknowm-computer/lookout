@@ -54,13 +54,16 @@ public struct LayoutWindow: Codable, Equatable, Sendable, Identifiable {
     public var launchDate: Date
     public var identifier: String
     public var title: String
+    /// Digest of the document URL supplied by Accessibility, when available.
+    public var documentDigest: Data?
     public var displayID: String
     /// Position relative to the saved display, in Accessibility's top-left coordinates.
     public var frame: LayoutRect
     public init(id: UUID = UUID(), bundleID: String, pid: Int32, launchDate: Date,
-                identifier: String, title: String, displayID: String, frame: LayoutRect) {
+                identifier: String, title: String, displayID: String, frame: LayoutRect, documentDigest: Data? = nil) {
         self.id = id; self.bundleID = bundleID; self.pid = pid; self.launchDate = launchDate
         self.identifier = identifier; self.title = title; self.displayID = displayID; self.frame = frame
+        self.documentDigest = documentDigest
     }
     public func target(on displays: [LayoutDisplay]) -> LayoutRect? {
         guard let display = displays.first(where: { $0.id == displayID }) else { return nil }
@@ -89,6 +92,7 @@ public struct WindowLayoutSnapshot: Codable, Equatable, Sendable {
                 window.pid > 0 && !window.bundleID.isEmpty && window.bundleID.count <= 512
                     && window.launchDate.timeIntervalSince1970.isFinite
                     && window.identifier.count <= 4096 && window.title.count <= 4096
+                    && (window.documentDigest.map { $0.count == 32 } ?? true)
                     && window.frame.isValid && displays.contains { $0.id == window.displayID }
             }
     }

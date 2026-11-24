@@ -388,10 +388,17 @@
 "CPU·GPU 중 높은 온도를 기준으로 알립니다. 팬 설정과 관계없이 동작합니다." = "Uses the higher CPU or GPU temperature, regardless of the fan setting.";
 
 "창 배치 자동 복원" = "Automatic window layout restore";
+"세부 옵션" = "More Options";
+"저장된 배치" = "Saved layout";
+"메모리 배치 마지막 갱신" = "Last in-memory layout update";
+"갱신 기록 없음" = "No updates yet";
+"잠자기·화면 절전에서 돌아오거나 잠금을 해제하면 창을 복원합니다." = "Restore windows after your Mac or its displays wake, or when you unlock it.";
+"미리보기를 사용하려면 창 배치 도우미에 화면 기록 권한을 허용해주세요." = "Allow Screen Recording for the window helper to use screenshot previews.";
+"저장 간격" = "Save interval";
 
 "잠자기 전 저장·복귀 후 자동 복원" = "Save before sleep and restore after wake";
 
-"일반 창의 위치·크기를 자동 저장합니다. 같은 모니터가 모두 연결되면 복원하며, 전체화면·최소화 창은 제외합니다." = "Automatically saves normal window positions and sizes. Restores after all saved displays reconnect. Full-screen and minimized windows are excluded.";
+"잠자기나 화면 절전에서 돌아오거나 잠금을 해제하면 창 배치를 복원합니다. 같은 모니터가 모두 연결되어야 하며 전체화면·최소화 창은 제외합니다." = "Restores window layouts after system sleep, display sleep, or unlocking. All saved displays must be connected. Full-screen and minimized windows are excluded.";
 
 "자동 저장·복원이 꺼져 있습니다." = "Automatic save and restore is off.";
 

@@ -28,9 +28,9 @@ import WindowHelperProtocol
         listener.resume()
     }
     fileprivate func attach(_ connection: NSXPCConnection) { client = connection }
-    fileprivate func configure(_ enabled: Bool, legacy: Data?) -> Data? {
-        // Keep the XPC argument for compatibility, but legacy app snapshots have no boot identity.
-        // Importing them here could resurrect a layout cleared after reboot.
+    fileprivate func configure(_ enabled: Bool, configuration: Data?) -> Data? {
+        let interval = WindowHelperConfiguration.decode(configuration)?.captureInterval ?? .defaultValue
+        engine.setCaptureInterval(interval)
         engine.setEnabled(enabled); engine.refresh()
         return encodedState()
     }
@@ -96,9 +96,9 @@ private final class WindowListenerDelegate: NSObject, NSXPCListenerDelegate, @un
 private final class WindowHelperSession: NSObject, WindowHelperProtocol, @unchecked Sendable {
     private let server: WindowHelperServer
     init(server: WindowHelperServer) { self.server = server }
-    func configure(_ enabled: Bool, legacy: Data?, reply: @escaping @Sendable (Data?) -> Void) {
-        guard legacy == nil || legacy!.count <= WindowHelperEndpoint.maximumTransferBytes else { reply(nil); return }
-        Task { @MainActor [server] in reply(server.configure(enabled, legacy: legacy)) }
+    func configure(_ enabled: Bool, legacy configuration: Data?, reply: @escaping @Sendable (Data?) -> Void) {
+        guard (configuration?.count ?? 0) <= WindowHelperEndpoint.maximumTransferBytes else { reply(nil); return }
+        Task { @MainActor [server] in reply(server.configure(enabled, configuration: configuration)) }
     }
     func status(reply: @escaping @Sendable (Data?) -> Void) {
         Task { @MainActor [server] in reply(server.encodedState()) }

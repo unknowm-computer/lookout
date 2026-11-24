@@ -112,9 +112,12 @@ import Testing
     var configured = false
     let client = WindowLayoutClient(defaults: defaults, revision: "same",
         registrationService: FakeFanHelperRegistration(status: .enabled),
-        requestOverride: { action, _, legacy in
-            #expect(legacy == nil)
-            if action == nil { configured = true }
+        requestOverride: { action, _, configuration in
+            if action == nil {
+                #expect(WindowHelperConfiguration.decode(configuration)?.captureInterval == .oneMinute)
+                #expect(WindowLayoutTransfer.decode(configuration) == nil)
+                configured = true
+            }
             return try JSONEncoder().encode(WindowHelperState(enabled: true, busy: false, phase: .ready,
                 permission: WindowAccessReport(trustedAPI: true, query: .allowed), savedAt: nil,
                 backupAt: nil, pending: false, processID: 123))
@@ -122,6 +125,43 @@ import Testing
     defer { client.stop() }
     for _ in 0..<100 where client.busy { try await Task.sleep(for: .milliseconds(2)) }
     #expect(configured && client.connected && client.savedAt == nil && !client.canRestore)
+}
+
+@Test @MainActor func changingWindowCaptureIntervalPersistsAndReconfiguresTheConnectedHelper() async throws {
+    let (name, defaults) = try windowDefaults(); defer { defaults.removePersistentDomain(forName: name) }
+    defaults.set(true, forKey: WindowLayoutClient.enabledKey)
+    defaults.set("same", forKey: HelperServiceKind.window.revisionKey)
+    defaults.set(15, forKey: WindowLayoutClient.captureIntervalKey)
+    var intervals: [WindowLayoutCaptureInterval] = []
+    var firstReply: CheckedContinuation<Void, Never>?
+    let response = try JSONEncoder().encode(WindowHelperState(enabled: true, busy: false, phase: .ready,
+        permission: WindowAccessReport(trustedAPI: true, query: .allowed), savedAt: nil,
+        backupAt: nil, pending: false, processID: 123))
+    let client = WindowLayoutClient(defaults: defaults, revision: "same",
+        registrationService: FakeFanHelperRegistration(status: .enabled),
+        requestOverride: { action, _, configuration in
+            #expect(action == nil)
+            let interval = try #require(WindowHelperConfiguration.decode(configuration)).captureInterval
+            intervals.append(interval)
+            if intervals.count == 1 {
+                await withCheckedContinuation { firstReply = $0 }
+            }
+            return response
+        })
+    defer {
+        firstReply?.resume()
+        client.stop()
+    }
+    #expect(client.captureInterval == .oneMinute)
+    for _ in 0..<100 where firstReply == nil { try await Task.sleep(for: .milliseconds(2)) }
+    try #require(firstReply != nil)
+    client.setCaptureInterval(.thirtySeconds)
+    client.setCaptureInterval(.tenMinutes)
+    #expect(defaults.integer(forKey: WindowLayoutClient.captureIntervalKey) == 600)
+    firstReply?.resume()
+    firstReply = nil
+    for _ in 0..<100 where client.connecting { try await Task.sleep(for: .milliseconds(2)) }
+    #expect(client.connected && !client.connecting && intervals == [.oneMinute, .tenMinutes])
 }
 @Test func actualAXQueryDistinguishesPermissionFromAnUnresponsiveTarget() {
     #expect(WindowAccessReport(trustedAPI: false, query: .allowed).canAccess)
@@ -167,18 +207,23 @@ import Testing
     #expect(WindowHelperState.decode(try JSONEncoder().encode(wrong)) == nil)
     #expect(WindowHelperState.decode(Data(repeating: 0, count: 65_536)) == nil)
     #expect(WindowLayoutTransfer.decode(Data(repeating: 0, count: WindowHelperEndpoint.maximumTransferBytes + 1)) == nil)
+    #expect(WindowLayoutCaptureInterval.allCases.map(\.rawValue) == [30, 60, 300, 600])
+    let invalidInterval = Data(#"{"captureInterval":15}"#.utf8)
+    #expect(WindowHelperConfiguration.decode(invalidInterval) == nil)
 }
 
 @Test func windowRestoreDiagnosticsAreBoundedValidatedAndCompatibleWithOlderReplies() throws {
     var state = WindowHelperState(enabled: true, busy: false, phase: .incomplete,
         permission: WindowAccessReport(trustedAPI: true, query: .allowed), savedAt: nil, backupAt: nil,
         pending: true, processID: 123)
-    let older = try JSONEncoder().encode(state)
-    #expect(WindowHelperState.decode(older)?.restoreReport == nil)
+    let older = try #require(WindowHelperState.decode(JSONEncoder().encode(state)))
+    #expect(older.restoreReport == nil && older.lastRecentCaptureAt == nil)
+    state.lastRecentCaptureAt = Date(timeIntervalSince1970: 1_700_000_000)
     let issues = (0..<200).map { _ in WindowRestoreIssue(id: UUID(), app: String(repeating: "앱", count: 500),
         title: String(repeating: "창", count: 4_096), reason: .ambiguousIdentity) }
     state.restoreReport = WindowRestoreReport(restored: 0, skipped: 0, failed: 200, issues: issues)
     let data = try JSONEncoder().encode(state)
+    #expect(WindowHelperState.decode(data)?.lastRecentCaptureAt == state.lastRecentCaptureAt)
     let decoded = try #require(WindowHelperState.decode(data)?.restoreReport)
     #expect(data.count < 65_536 && decoded.issues.count == 20 && decoded.failed == 200)
     #expect(decoded.issues[0].app.count == 64 && decoded.issues[0].title.count == 96)
