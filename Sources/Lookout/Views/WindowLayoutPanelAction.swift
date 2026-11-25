@@ -95,7 +95,7 @@ private struct WindowLayoutActionsPopover: View {
             }
             .disabled(!service.canRestore)
         }
-        .modifier(WindowLayoutPreviewHover(service: service, hovering: $hoveringRestore))
+        .modifier(WindowLayoutPreviewHover(service: service, hovering: $hoveringRestore, presentation: .menuBar))
     }
 
     private func action(_ title: LocalizedText, symbol: String, perform: @escaping () -> Void) -> some View {

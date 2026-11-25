@@ -4,6 +4,7 @@ import SwiftUI
 struct WindowLayoutPreviewHover: ViewModifier {
     @ObservedObject var service: WindowLayoutClient
     @Binding var hovering: Bool
+    let presentation: WindowLayoutPreviewTooltip.Presentation
     @State private var preview: (date: Date, image: CGImage)?
 
     private var requestedDate: Date? { hovering ? service.savedPreviewAt : nil }
@@ -13,7 +14,8 @@ struct WindowLayoutPreviewHover: ViewModifier {
             .contentShape(Rectangle())
             .onHover { hovering = $0 }
             .background {
-                WindowLayoutPreviewTooltip(image: requestedDate == preview?.date ? preview?.image : nil)
+                WindowLayoutPreviewTooltip(image: requestedDate == preview?.date ? preview?.image : nil,
+                                          presentation: presentation)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }

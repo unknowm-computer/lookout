@@ -83,7 +83,7 @@ struct WindowLayoutSettingsView: View {
                     Text(L10n.text("저장된 배치가 없습니다.")).foregroundStyle(.secondary)
                 }
             }
-            .modifier(WindowLayoutPreviewHover(service: service, hovering: $hoveringSavedLayout))
+            .modifier(WindowLayoutPreviewHover(service: service, hovering: $hoveringSavedLayout, presentation: .settings))
             if let state = service.state {
                 HStack {
                     Text(L10n.text("메모리 배치 마지막 갱신"))

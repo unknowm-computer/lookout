@@ -75,3 +75,25 @@ import WindowLayoutModel
     let fallback = try #require(WindowLayoutPreviewImage.make(legacy))
     #expect(fallback.width == 720 && fallback.height == 360)
 }
+
+@Test func menuBarLayoutPreviewKeepsItsSizeAcrossImagesAndPopoverHeights() throws {
+    let screen = CGRect(x: -1440, y: 30, width: 1440, height: 840)
+    let anchor = CGRect(x: -240, y: 780, width: 220, height: 22)
+    let menu = WindowLayoutPreviewTooltip.Presentation.menuBar
+    for height in [100, 240] {
+        let popover = CGRect(x: -252, y: 830 - height, width: 244, height: height)
+        for image in [CGSize(width: 720, height: 160), CGSize(width: 120, height: 360), CGSize(width: 360, height: 360)] {
+            let frame = try #require(menu.panelFrame(image: image, anchor: anchor, window: popover, screen: screen))
+            #expect(frame.size == CGSize(width: 332, height: 192))
+            #expect(frame.maxY == anchor.minY - 6)
+            #expect(frame.maxX == screen.maxX - 4)
+        }
+    }
+
+    let lowerRow = anchor.offsetBy(dx: -400, dy: -700)
+    let lowerMenu = CGRect(x: lowerRow.minX - 12, y: 40, width: 244, height: 100)
+    let above = try #require(menu.panelFrame(image: CGSize(width: 720, height: 360),
+                                             anchor: lowerRow, window: lowerMenu, screen: screen))
+    #expect(above.origin == CGPoint(x: lowerRow.minX, y: lowerRow.maxY + 6))
+    #expect(above.size == CGSize(width: 332, height: 192))
+}
