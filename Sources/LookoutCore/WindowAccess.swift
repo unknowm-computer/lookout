@@ -15,9 +15,9 @@ extension WindowAccessReport {
 extension WindowLayoutPhase {
     public var message: String {
         switch self {
-        case .disabled: L10n.text("자동 저장·복원이 꺼져 있습니다.")
+        case .disabled: L10n.text("창 배치 자동 복원이 꺼져 있습니다.")
         case .permission: L10n.text("창을 저장·복원하려면 손쉬운 사용 권한이 필요합니다.")
-        case .ready: L10n.text("첫 정상 배치를 저장할 준비 중입니다.")
+        case .ready: L10n.text("창 배치 자동 복원이 켜져 있습니다.")
         case .saved: L10n.text("창 배치를 저장했습니다.")
         case .waiting: L10n.text("저장된 모니터 구성이 안정될 때까지 기다립니다. 기존 배치는 보관합니다.")
         case .displayNotReady: L10n.text("제한 시간 안에 모니터 구성이 안정되지 않았습니다. 모니터를 확인한 뒤 직접 복원해주세요.")

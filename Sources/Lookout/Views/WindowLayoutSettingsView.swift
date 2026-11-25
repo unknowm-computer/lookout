@@ -24,7 +24,7 @@ struct WindowLayoutSettingsView: View {
                     get: { service.enabled }, set: { service.setEnabled($0) }
                 ))
                 .toggleStyle(.switch).controlSize(.small).labelsHidden()
-                .help(L10n.text("잠자기나 화면 절전에서 돌아오거나 잠금을 해제하면 창 배치를 복원합니다. 같은 모니터가 모두 연결되어야 하며 전체화면·최소화 창은 제외합니다."))
+                .help(L10n.text("복귀하면 같은 모니터 구성에서 마지막 정상 메모리 배치를 복원합니다. 메모리에 배치가 없으면 수동 저장본을 사용합니다."))
             }
             Divider()
             if service.enabled { permissionNotices }
@@ -56,9 +56,9 @@ struct WindowLayoutSettingsView: View {
 
     private var intervalRow: some View {
         HStack {
-            Text(L10n.text("저장 간격"))
+            Text(L10n.text("메모리 갱신 간격"))
             Spacer()
-            Picker(L10n.text("저장 간격"), selection: Binding(
+            Picker(L10n.text("메모리 갱신 간격"), selection: Binding(
                 get: { service.captureInterval }, set: { service.setCaptureInterval($0) }
             )) {
                 ForEach(WindowLayoutCaptureInterval.allCases, id: \.self) { interval in

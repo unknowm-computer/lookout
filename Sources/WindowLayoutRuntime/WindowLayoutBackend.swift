@@ -7,7 +7,7 @@ import WindowLayoutModel
 
 @MainActor protocol WindowLayoutBackend: AnyObject {
     var isTrusted: Bool { get }
-    var hasAwakeExternalDisplay: Bool { get }
+    var captureDisplaysAwake: Bool { get }
     var isScreenLocked: Bool { get }
     var areScreensAsleep: Bool { get }
     func checkPermission() -> WindowAccessReport
@@ -52,11 +52,11 @@ struct WindowRestoreResult {
         return (session?["CGSSessionScreenIsLocked"] as? Bool) ?? false
     }
     var areScreensAsleep: Bool { CGDisplayIsAsleep(CGMainDisplayID()) != 0 }
-    var hasAwakeExternalDisplay: Bool {
-        NSScreen.screens.contains { screen in
+    var captureDisplaysAwake: Bool {
+        NSScreen.screens.allSatisfy { screen in
             guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else { return false }
             let display = number.uint32Value
-            return CGDisplayIsBuiltin(display) == 0 && CGDisplayIsAsleep(display) == 0
+            return CGDisplayIsAsleep(display) == 0
         }
     }
     func checkPermission() -> WindowAccessReport {

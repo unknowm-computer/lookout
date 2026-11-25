@@ -394,17 +394,15 @@
 "갱신 기록 없음" = "No updates yet";
 "잠자기·화면 절전에서 돌아오거나 잠금을 해제하면 창을 복원합니다." = "Restore windows after your Mac or its displays wake, or when you unlock it.";
 "미리보기를 사용하려면 창 배치 도우미에 화면 기록 권한을 허용해주세요." = "Allow Screen Recording for the window helper to use screenshot previews.";
-"저장 간격" = "Save interval";
+"메모리 갱신 간격" = "Memory refresh interval";
 
-"잠자기 전 저장·복귀 후 자동 복원" = "Save before sleep and restore after wake";
+"복귀하면 같은 모니터 구성에서 마지막 정상 메모리 배치를 복원합니다. 메모리에 배치가 없으면 수동 저장본을 사용합니다." = "On wake or unlock, Lookout restores the last complete in-memory layout on the same displays. If there is no in-memory layout, it uses your last manually saved layout.";
 
-"잠자기나 화면 절전에서 돌아오거나 잠금을 해제하면 창 배치를 복원합니다. 같은 모니터가 모두 연결되어야 하며 전체화면·최소화 창은 제외합니다." = "Restores window layouts after system sleep, display sleep, or unlocking. All saved displays must be connected. Full-screen and minimized windows are excluded.";
-
-"자동 저장·복원이 꺼져 있습니다." = "Automatic save and restore is off.";
+"창 배치 자동 복원이 꺼져 있습니다." = "Automatic window layout restore is off.";
 
 "창을 저장·복원하려면 손쉬운 사용 권한이 필요합니다." = "Accessibility permission is required to save and restore windows.";
 
-"첫 정상 배치를 저장할 준비 중입니다." = "Preparing to save the first stable layout.";
+"창 배치 자동 복원이 켜져 있습니다." = "Automatic window layout restore is on.";
 
 "창 배치를 저장했습니다." = "The window layout is saved.";
 

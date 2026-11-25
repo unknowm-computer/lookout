@@ -72,6 +72,19 @@ struct WindowLayoutLogEvent: Codable {
         if let data = encodeLog(history) { try? write(data, to: logURL) }
     }
 
+    // Legacy snapshots shared the same slots for manual and automatic saves.
+    // The journal stores dates with second precision, so reject ambiguous matches.
+    func confirmsManualSave(_ snapshot: WindowLayoutSnapshot) -> Bool {
+        let saves = loadLog().events.filter { event in
+            guard event.action == "manualSave" || event.action == "automaticSave",
+                  ["saved", "savedWithOmissions", "savedRecentLayout"].contains(event.result),
+                  let date = event.layoutDate else { return false }
+            return floor(date.timeIntervalSince1970) == floor(snapshot.date.timeIntervalSince1970)
+                && event.windows == snapshot.windows.count
+        }
+        return saves.count == 1 && saves[0].action == "manualSave"
+    }
+
     func diagnostics() -> Data? { encodeLog(loadLog()) }
 
     func store(_ preview: WindowLayoutPreview) -> Bool {

@@ -76,6 +76,7 @@ public struct WindowLayoutSnapshot: Codable, Equatable, Sendable {
     public var date: Date
     public var displays: [LayoutDisplay]
     public var windows: [LayoutWindow]
+    public var manuallySaved: Bool?
     public var savedWithOmissions: Bool?
     public var savedDuringPendingRestore: Bool?
     public init(date: Date = Date(), displays: [LayoutDisplay], windows: [LayoutWindow], savedWithOmissions: Bool? = nil) {
